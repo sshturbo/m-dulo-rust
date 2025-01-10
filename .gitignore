@@ -1,1 +1,7 @@
 /target
+
+.vscode
+.env
+
+Cargo.lock
+*.log
