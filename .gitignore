@@ -2,6 +2,8 @@
 
 .vscode
 .env
+.env.example
+db/banco.sqlite
 
 Cargo.lock
 *.log
