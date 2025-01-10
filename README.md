@@ -1,4 +1,4 @@
-# Módulo Rust
+# Módulo m-dulo-rust
 
 ## Requisitos
 
@@ -9,7 +9,7 @@
 
 1. Clone o repositório:
     ```sh
-    git clone <URL-do-repositório>
+    git clone https://github.com/sshturbo/m-dulo-rust.git
     cd m-dulo-rust
     ```
 
@@ -27,9 +27,9 @@
 
 ### Criar
 
-- **Rota:** `/create`
+- **Rota:** `CRIAR`
 - **Método:** WebSocket
-- **Descrição:** Cria um novo item.
+- **Descrição:** Cria um novo usuario.
 - **Exemplo de uso:**
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001/ws');
@@ -40,9 +40,9 @@
 
 ### Deletar
 
-- **Rota:** `/delete`
+- **Rota:** `EXCLUIR`
 - **Método:** WebSocket
-- **Descrição:** Deleta um item.
+- **Descrição:** Remove um usuario por vez.
 - **Exemplo de uso:**
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001/ws');
@@ -53,9 +53,9 @@
 
 ### Excluir Global
 
-- **Rota:** `/remove_all`
+- **Rota:** `EXCLUIR_GLOBAL`
 - **Método:** WebSocket
-- **Descrição:** Remove todos os itens.
+- **Descrição:** Remove todos os usuarios de uma vez.
 - **Exemplo de uso:**
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001/ws');
