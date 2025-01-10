@@ -1,6 +1,7 @@
 pub mod models {
     pub mod user;
     pub mod delete;
+    pub mod delete_global;
 }
 mod routes;
 mod ws_handler; 
@@ -30,7 +31,6 @@ async fn main() {
         .route("/ws", get(websocket_handler))
         .route("/excluir/:usuario/:uuid", delete(excluir_usuario))
         .route("/excluir/:usuario", delete(excluir_usuario))
-        .route("/excluir_global", delete(excluir_global))
         .with_state(pool);
 
     println!("Servidor WebSocket rodando em ws://127.0.0.1:9001");

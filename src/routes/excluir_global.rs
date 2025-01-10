@@ -5,47 +5,52 @@ use axum::{
     Json,
 };
 use sqlx::{Pool, Sqlite};
-use serde::Deserialize;
 use std::process::Command;
 use std::fs;
 use serde_json::Value;
-
-#[derive(Deserialize)]
-pub struct ExcluirGlobalRequest {
-    usuarios: Vec<UsuarioUuid>,
-}
-
-#[derive(Deserialize)]
-pub struct UsuarioUuid {
-    usuario: String,
-    uuid: Option<String>,
-}
+use crate::models::delete_global::ExcluirGlobalRequest;
 
 pub async fn excluir_global(
-    State(pool): State<Pool<Sqlite>>,
-    Json(payload): Json<ExcluirGlobalRequest>,
-) -> impl IntoResponse {
+    pool: Pool<Sqlite>,
+    payload: ExcluirGlobalRequest,
+) -> Result<(), String> {
     let mut uuids_to_remove = Vec::new();
+    let mut usuarios_existentes: Vec<String> = Vec::new();
 
-    for item in payload.usuarios {
-        let usuario = item.usuario;
-        let uuid = item.uuid;
+    for usuario in &payload.usuarios {
+        // Verificar se o usuário existe no banco de dados
+        let user_exists = sqlx::query("SELECT 1 FROM users WHERE login = ?")
+            .bind(&usuario.usuario)
+            .fetch_optional(&pool)
+            .await
+            .map_err(|_| "Erro ao verificar usuário no banco de dados".to_string())?
+            .is_some();
+
+        if !user_exists {
+            continue;
+        }
 
         // Verificar se o usuário existe no sistema
         let output = Command::new("id")
-            .arg(&usuario)
+            .arg(&usuario.usuario)
             .output()
-            .expect("Falha ao executar comando");
+            .map_err(|_| "Falha ao executar comando".to_string())?;
 
-        if !output.status.success() {
-            continue; 
+        if output.status.success() {
+            usuarios_existentes.push(usuario.usuario.clone());
         }
 
         // Se UUID foi fornecido, adicionar à lista de remoção
-        if let Some(uuid) = uuid {
-            uuids_to_remove.push(uuid);
+        if let Some(uuid) = &usuario.uuid {
+            uuids_to_remove.push(uuid.clone());
         }
+    }
 
+    if usuarios_existentes.is_empty() {
+        return Err("Nenhum usuário encontrado para ser excluído".to_string());
+    }
+
+    for usuario in usuarios_existentes {
         // Matar todos os processos do usuário
         let _ = Command::new("pkill")
             .args(["-u", &usuario])
@@ -55,13 +60,14 @@ pub async fn excluir_global(
         let _ = Command::new("userdel")
             .arg(&usuario)
             .status()
-            .expect("Falha ao excluir usuário");
+            .map_err(|_| "Falha ao excluir usuário".to_string())?;
 
         // Remover do banco de dados
         let _ = sqlx::query("DELETE FROM users WHERE login = ?")
             .bind(&usuario)
             .execute(&pool)
-            .await;
+            .await
+            .map_err(|_| "Erro ao remover usuário do banco de dados".to_string())?;
     }
 
     // Remover todos os UUIDs do V2Ray e reiniciar o serviço
@@ -69,14 +75,14 @@ pub async fn excluir_global(
         remover_uuids_v2ray(&uuids_to_remove).await;
     }
 
-    (StatusCode::OK, "Usuários excluídos com sucesso").into_response()
+    Ok(())
 }
 
 async fn remover_uuids_v2ray(uuids: &[String]) {
     let config_path = "/etc/v2ray/config.json";
     
     if !std::path::Path::new(config_path).exists() {
-        return; // V2Ray não está instalado
+        return; 
     }
 
     // Ler e parsear o arquivo de configuração
