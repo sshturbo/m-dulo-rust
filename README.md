@@ -32,9 +32,9 @@
 - **Descrição:** Cria um novo item.
 - **Exemplo de uso:**
     ```javascript
-    const socket = new WebSocket('ws://localhost:8000/create');
+    const socket = new WebSocket('ws://127.0.0.1:9001/ws');
     socket.onopen = () => {
-        socket.send(JSON.stringify({ login: 'teste3', senha: '102030', dias: 30, limite: 1 }));
+        socket.send(JSON.stringify({ CRIAR: { login: 'teste3', senha: '102030', dias: 30, limite: 1 } }));
     };
     ```
 
@@ -45,9 +45,9 @@
 - **Descrição:** Deleta um item.
 - **Exemplo de uso:**
     ```javascript
-    const socket = new WebSocket('ws://localhost:8000/delete');
+    const socket = new WebSocket('ws://127.0.0.1:9001/ws');
     socket.onopen = () => {
-        socket.send(JSON.stringify({ usuario: 'teste3', uuid: null }));
+        socket.send(JSON.stringify({ EXCLUIR: { usuario: 'teste3', uuid: null } }));
     };
     ```
 
@@ -58,8 +58,8 @@
 - **Descrição:** Remove todos os itens.
 - **Exemplo de uso:**
     ```javascript
-    const socket = new WebSocket('ws://localhost:8000/remove_all');
+    const socket = new WebSocket('ws://127.0.0.1:9001/ws');
     socket.onopen = () => {
-        socket.send(JSON.stringify({ usuarios: [{ usuario: 'teste3', uuid: null }] }));
+        socket.send(JSON.stringify({ EXCLUIR_GLOBAL: { usuarios: [{ usuario: 'teste3', uuid: null }] } }));
     };
     ```
