@@ -60,6 +60,6 @@
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001/ws');
     socket.onopen = () => {
-        socket.send(JSON.stringify({ EXCLUIR_GLOBAL: { usuarios: [{ usuario: 'teste3', uuid: null }] } }));
+        socket.send(JSON.stringify({ EXCLUIR_GLOBAL:{"usuarios":[{"usuario":"teste2","uuid": null},{"usuario":"teste1","uuid": null}]} }));
     };
     ```
