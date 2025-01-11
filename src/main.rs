@@ -15,7 +15,7 @@ use axum::{
 use tokio::net::TcpListener;
 use crate::db::initialize_db;
 use crate::routes::excluir::excluir_usuario;
-// use crate::routes::excluir_global::excluir_global; // Remover importação não utilizada
+// use crate::routes::excluir_global::excluir_global; 
 use crate::ws_handler::handler::websocket_handler;
 use env_logger;
 

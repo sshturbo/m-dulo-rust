@@ -19,7 +19,6 @@ pub async fn editar_usuario(
 ) -> Result<(), String> {
     let mut db = db.lock().await;
 
-    // Verificar se o usuário antigo existe no banco de dados
     let existing_user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE login = ?")
         .bind(&edit_req.login_antigo)
         .fetch_optional(pool)
@@ -30,7 +29,6 @@ pub async fn editar_usuario(
         return Err("Usuário antigo não encontrado no banco de dados!".to_string());
     }
 
-    // Excluir o usuário antigo do sistema
     let _ = Command::new("pkill")
         .args(["-u", &edit_req.login_antigo])
         .status();
@@ -40,7 +38,6 @@ pub async fn editar_usuario(
         .status()
         .expect("Falha ao excluir usuário");
 
-    // Criar o novo usuário no sistema
     let new_user = User {
         login: edit_req.login_novo.clone(),
         senha: edit_req.senha.clone(),

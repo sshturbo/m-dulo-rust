@@ -7,5 +7,5 @@ pub struct EditRequest {
     pub senha: String,
     pub dias: u32,
     pub limite: u32,
-    pub uuid: Option<String>, // Permitir valores null
+    pub uuid: Option<String>, 
 }

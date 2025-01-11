@@ -12,7 +12,6 @@ pub async fn excluir_global(
     let mut usuarios_existentes: Vec<String> = Vec::new();
 
     for usuario in &payload.usuarios {
-        // Verificar se o usuário existe no banco de dados
         let user_exists = sqlx::query("SELECT 1 FROM users WHERE login = ?")
             .bind(&usuario.usuario)
             .fetch_optional(&pool)
@@ -24,7 +23,6 @@ pub async fn excluir_global(
             continue;
         }
 
-        // Verificar se o usuário existe no sistema
         let output = Command::new("id")
             .arg(&usuario.usuario)
             .output()
@@ -34,7 +32,6 @@ pub async fn excluir_global(
             usuarios_existentes.push(usuario.usuario.clone());
         }
 
-        // Se UUID foi fornecido, adicionar à lista de remoção
         if let Some(uuid) = &usuario.uuid {
             uuids_to_remove.push(uuid.clone());
         }
@@ -45,18 +42,15 @@ pub async fn excluir_global(
     }
 
     for usuario in usuarios_existentes {
-        // Matar todos os processos do usuário
         let _ = Command::new("pkill")
             .args(["-u", &usuario])
             .status();
 
-        // Excluir o usuário do sistema
         let _ = Command::new("userdel")
             .arg(&usuario)
             .status()
             .map_err(|_| "Falha ao excluir usuário".to_string())?;
 
-        // Remover do banco de dados
         let _ = sqlx::query("DELETE FROM users WHERE login = ?")
             .bind(&usuario)
             .execute(&pool)
@@ -64,7 +58,6 @@ pub async fn excluir_global(
             .map_err(|_| "Erro ao remover usuário do banco de dados".to_string())?;
     }
 
-    // Remover todos os UUIDs do V2Ray e reiniciar o serviço
     if !uuids_to_remove.is_empty() {
         remover_uuids_v2ray(&uuids_to_remove).await;
     }
@@ -79,7 +72,6 @@ async fn remover_uuids_v2ray(uuids: &[String]) {
         return; 
     }
 
-    // Ler e parsear o arquivo de configuração
     if let Ok(content) = fs::read_to_string(config_path) {
         if let Ok(mut json) = serde_json::from_str::<Value>(&content) {
             if let Some(inbounds) = json.get_mut("inbounds") {
@@ -87,15 +79,12 @@ async fn remover_uuids_v2ray(uuids: &[String]) {
                     if let Some(settings) = first_inbound.get_mut("settings") {
                         if let Some(clients) = settings.get_mut("clients") {
                             if let Some(clients_array) = clients.as_array_mut() {
-                                // Remover os clientes com os UUIDs especificados
                                 clients_array.retain(|client| {
                                     !uuids.contains(&client["id"].as_str().unwrap_or("").to_string())
                                 });
 
-                                // Salvar as alterações
                                 if let Ok(new_content) = serde_json::to_string_pretty(&json) {
                                     if fs::write(config_path, new_content).is_ok() {
-                                        // Reiniciar o serviço V2Ray
                                         let _ = Command::new("systemctl")
                                             .args(["restart", "v2ray"])
                                             .status();

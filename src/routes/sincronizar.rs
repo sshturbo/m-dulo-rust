@@ -45,7 +45,6 @@ pub async fn verificar_e_criar_usuario(db: Database, pool: &Pool<Sqlite>, user: 
 }
 
 pub async fn excluir_usuario_sistema(usuario: &str, uuid: &Option<String>, pool: &Pool<Sqlite>) -> Result<(), String> {
-    // Verificar se o usuário existe no sistema
     let output = Command::new("id")
         .arg(usuario)
         .output()
@@ -55,25 +54,21 @@ pub async fn excluir_usuario_sistema(usuario: &str, uuid: &Option<String>, pool:
         return Err("Usuário não encontrado no sistema".to_string());
     }
 
-    // Se UUID foi fornecido, tentar remover do V2Ray
     if let Some(uuid) = uuid {
         if v2ray_instalado() {
             remover_uuid_v2ray(uuid).await;
         }
     }
 
-    // Matar todos os processos do usuário
     let _ = Command::new("pkill")
         .args(["-u", usuario])
         .status();
 
-    // Excluir o usuário do sistema
     let _ = Command::new("userdel")
         .arg(usuario)
         .status()
         .expect("Falha ao excluir usuário");
 
-    // Remover do banco de dados
     match sqlx::query("DELETE FROM users WHERE login = ?")
         .bind(usuario)
         .execute(pool)
@@ -118,7 +113,6 @@ pub async fn process_user_data(user: User) {
 
     adicionar_usuario_sistema(username, password, dias, sshlimiter);
 
-    // Se o arquivo de configuração do V2Ray existir, adiciona UUID
     if v2ray_instalado() {
         if let Some(ref uuid) = uuid {
             adicionar_uuid_ao_v2ray(uuid, username, dias);
@@ -138,7 +132,6 @@ fn gerar_email_aleatorio(tamanho: usize) -> String {
 fn adicionar_usuario_sistema(username: &str, password: &str, dias: u32, sshlimiter: u32) {
     let final_date = (Utc::now() + Duration::days(dias as i64)).format("%Y-%m-%d").to_string();
 
-    // Criar usuário usando comando useradd
     let _ = Command::new("useradd")
         .args([
             "-M",
@@ -149,7 +142,6 @@ fn adicionar_usuario_sistema(username: &str, password: &str, dias: u32, sshlimit
         .status()
         .expect("Falha ao criar usuário");
 
-    // Definir senha do usuário
     let echo_password = Command::new("echo")
         .arg(format!("{}:{}", username, password))
         .stdout(std::process::Stdio::piped())
@@ -161,11 +153,9 @@ fn adicionar_usuario_sistema(username: &str, password: &str, dias: u32, sshlimit
         .status()
         .expect("Falha ao definir senha");
 
-    // Criar arquivo com o nome de usuário e senha
     let password_file_path = format!("/etc/SSHPlus/senha/{}", username);
     fs::write(&password_file_path, password).expect("Falha ao criar arquivo de senha");
 
-    // Adicionar ao arquivo usuarios.db
     let mut file = OpenOptions::new()
         .append(true)
         .create(true)
@@ -220,10 +210,9 @@ async fn remover_uuid_v2ray(uuid: &str) {
     let config_path = "/etc/v2ray/config.json";
     
     if !std::path::Path::new(config_path).exists() {
-        return; // V2Ray não está instalado
+        return; 
     }
 
-    // Ler e parsear o arquivo de configuração
     if let Ok(content) = fs::read_to_string(config_path) {
         if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(&content) {
             if let Some(inbounds) = json.get_mut("inbounds") {
@@ -236,7 +225,7 @@ async fn remover_uuid_v2ray(uuid: &str) {
                                     client["id"].as_str().unwrap_or("") != uuid
                                 });
 
-                                // Salvar as alterações
+                    
                                 if let Ok(new_content) = serde_json::to_string_pretty(&json) {
                                     if fs::write(config_path, new_content).is_ok() {
                                         // Reiniciar o serviço V2Ray
