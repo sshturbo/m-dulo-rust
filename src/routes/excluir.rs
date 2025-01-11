@@ -1,8 +1,4 @@
-use axum::{
-    extract::{Path, State},
-    response::IntoResponse,
-    http::StatusCode,
-};
+use axum::extract::{Path, State};
 use sqlx::{Pool, Sqlite};
 use std::process::Command;
 use log::{info, error};
@@ -12,17 +8,17 @@ use serde_json::Value;
 pub async fn excluir_usuario(
     Path((usuario, uuid)): Path<(String, Option<String>)>,
     State(pool): State<Pool<Sqlite>>,
-) -> impl IntoResponse {
+) -> Result<String, String> {
     info!("Tentativa de exclusão do usuário {}", usuario);
 
     let output = Command::new("id")
         .arg(&usuario)
         .output()
-        .expect("Falha ao executar comando");
+        .map_err(|_| "Falha ao executar comando".to_string())?;
 
     if !output.status.success() {
         error!("Usuário {} não encontrado no sistema", usuario);
-        return (StatusCode::NOT_FOUND, "Usuário não encontrado no sistema").into_response();
+        return Err("Usuário não encontrado no sistema".to_string());
     }
 
     if let Some(uuid) = uuid {
@@ -36,7 +32,8 @@ pub async fn excluir_usuario(
     let _ = Command::new("userdel")
         .arg(&usuario)
         .status()
-        .expect("Falha ao excluir usuário");
+        .map_err(|_| "Falha ao excluir usuário".to_string())?;
+
 
     match sqlx::query("DELETE FROM users WHERE login = ?")
         .bind(&usuario)
@@ -45,11 +42,11 @@ pub async fn excluir_usuario(
     {
         Ok(_) => {
             info!("Usuário {} excluído com sucesso", usuario);
-            (StatusCode::OK, "Usuário excluído com sucesso").into_response()
+            Ok("Usuário excluído com sucesso".to_string())
         }
         Err(e) => {
             error!("Erro ao excluir usuário {} do banco: {}", usuario, e);
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("Erro ao excluir usuário do banco: {}", e)).into_response()
+            Err(format!("Erro ao excluir usuário do banco: {}", e))
         }
     }
 }
@@ -85,3 +82,4 @@ async fn remover_uuid_v2ray(uuid: &str) {
         }
     }
 }
+
