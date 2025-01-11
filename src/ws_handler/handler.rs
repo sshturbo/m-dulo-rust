@@ -6,6 +6,7 @@ use crate::routes::{
     criar::criar_usuario,
     excluir::excluir_usuario,
     excluir_global::excluir_global,
+    sincronizar::sincronizar_usuarios,
 };
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -78,6 +79,12 @@ async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result
                 Ok(_) => Ok("Usuários excluídos com sucesso!".to_string()),
                 Err(e) => Err(e)
             }
+        },
+        "SINCRONIZAR" => {
+            let usuarios: Vec<User> = serde_json::from_str(dados)
+                .map_err(|_| "Dados de usuários inválidos".to_string())?;
+            sincronizar_usuarios(db, pool, usuarios).await?;
+            Ok("Usuários sincronizados com sucesso!".to_string())
         },
         _ => Err("Comando não reconhecido. Use CRIAR, EXCLUIR ou EXCLUIR_GLOBAL".to_string())
     }
