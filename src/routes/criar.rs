@@ -60,13 +60,13 @@ pub async fn process_user_data(user: User) {
     // Se o arquivo de configuração do V2Ray existir, adiciona UUID e reinicia o serviço
     if std::path::Path::new("/etc/v2ray/config.json").exists() {
         if let Some(ref uuid) = uuid {
-            adicionar_uuid_ao_v2ray(uuid, username, dias);
-            
-            let _ = Command::new("systemctl")
-                .arg("restart")
-                .arg("v2ray")
-                .status()
-                .expect("Falha ao reiniciar o serviço V2Ray");
+            if adicionar_uuid_ao_v2ray(uuid, username, dias) {
+                let _ = Command::new("systemctl")
+                    .arg("restart")
+                    .arg("v2ray")
+                    .status()
+                    .expect("Falha ao reiniciar o serviço V2Ray");
+            }
         }
     }
 }
@@ -119,12 +119,12 @@ fn adicionar_usuario_sistema(username: &str, password: &str, dias: u32, sshlimit
     writeln!(file, "{} {}", username, sshlimiter).unwrap();
 }
 
-fn adicionar_uuid_ao_v2ray(uuid: &str, nome_usuario: &str, dias: u32) {
+fn adicionar_uuid_ao_v2ray(uuid: &str, nome_usuario: &str, dias: u32) -> bool {
     let config_file = "/etc/v2ray/config.json";
     
     if !std::path::Path::new(config_file).exists() {
         println!("Arquivo de configuração do V2Ray não encontrado. V2Ray parece não estar instalado.");
-        return;
+        return false;
     }
 
     let email = gerar_email_aleatorio(10);
@@ -154,9 +154,11 @@ fn adicionar_uuid_ao_v2ray(uuid: &str, nome_usuario: &str, dias: u32) {
                     {
                         let _ = writeln!(registro_file, "{} | {} | {}", uuid, nome_usuario, final_date);
                         println!("UUID adicionado com sucesso ao V2Ray!");
+                        return true;
                     }
                 }
             }
         }
     }
+    false
 }

@@ -7,15 +7,17 @@ use crate::routes::{
     excluir::excluir_usuario,
     excluir_global::excluir_global,
     sincronizar::sincronizar_usuarios,
+    editar::editar_usuario,
 };
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use std::collections::HashMap;
 use axum::extract::{Path, State};
-use axum::Json; 
 use crate::models::user::User;
 use crate::models::delete::DeleteRequest;
 use crate::models::delete_global::ExcluirGlobalRequest;
+use crate::models::edit::EditRequest;
+use std::env;
 
 type Database = Arc<Mutex<HashMap<String, User>>>;
 
@@ -44,13 +46,18 @@ async fn handle_socket(
 }
 
 async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result<String, String> {
-    let parts: Vec<&str> = text.splitn(2, ':').collect();
-    if parts.len() != 2 {
-        return Err("Formato inválido. Use COMANDO:DADOS (exemplo: CRIAR:{...})".to_string());
+    let parts: Vec<&str> = text.splitn(3, ':').collect();
+    if parts.len() != 3 {
+        return Err("Formato inválido. Use TOKEN:COMANDO:DADOS (exemplo: TOKEN:CRIAR:{...})".to_string());
     }
 
-    let (comando, dados) = (parts[0], parts[1]);
+    let (token, comando, dados) = (parts[0], parts[1], parts[2]);
     
+    let expected_token = env::var("API_TOKEN").map_err(|_| "Token não configurado".to_string())?;
+    if token != expected_token {
+        return Err("Token inválido".to_string());
+    }
+
     match comando {
         "CRIAR" => {
             let user: User = serde_json::from_str(dados)
@@ -86,6 +93,12 @@ async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result
             sincronizar_usuarios(db, pool, usuarios).await?;
             Ok("Usuários sincronizados com sucesso!".to_string())
         },
-        _ => Err("Comando não reconhecido. Use CRIAR, EXCLUIR ou EXCLUIR_GLOBAL".to_string())
+        "EDITAR" => {
+            let edit_req: EditRequest = serde_json::from_str(dados)
+                .map_err(|_| "Dados de edição inválidos".to_string())?;
+            editar_usuario(db, pool, edit_req).await?;
+            Ok("Usuário editado com sucesso!".to_string())
+        },
+        _ => Err("Comando não reconhecido. Use CRIAR, EXCLUIR, EXCLUIR_GLOBAL, SINCRONIZAR ou EDITAR".to_string())
     }
 }

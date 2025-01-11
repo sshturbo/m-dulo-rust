@@ -13,12 +13,22 @@
     cd m-dulo-rust
     ```
 
-2. Compile o projeto:
+2. Copie o arquivo `.env.example` para `.env` e configure o token:
+    ```sh
+    cp .env.example .env
+    ```
+
+3. Gere um token e adicione ao arquivo `.env`:
+    ```sh
+    echo "API_TOKEN=$(openssl rand -hex 16)" >> .env
+    ```
+
+4. Compile o projeto:
     ```sh
     cargo build
     ```
 
-3. Execute o projeto:
+5. Execute o projeto:
     ```sh
     cargo run
     ```
@@ -34,7 +44,7 @@
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001/ws');
     socket.onopen = () => {
-        socket.send(JSON.stringify({ CRIAR:{ "login": "teste2", "senha": "102030", "dias": 30, "limite": 1, "uuid": null } }));
+        socket.send('seu_token_aqui:CRIAR:{"login": "teste2", "senha": "102030", "dias": 30, "limite": 1, "uuid": null}');
     };
     ```
 
@@ -47,7 +57,7 @@
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001/ws');
     socket.onopen = () => {
-        socket.send(JSON.stringify({ EXCLUIR: { usuario: 'teste3', uuid: null } }));
+        socket.send('seu_token_aqui:EXCLUIR:{"usuario": "teste3", "uuid": null}');
     };
     ```
 
@@ -60,10 +70,9 @@
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001/ws');
     socket.onopen = () => {
-        socket.send(JSON.stringify({ EXCLUIR_GLOBAL:{"usuarios":[{"usuario":"teste2","uuid": null},{"usuario":"teste1","uuid": null}]} }));
+        socket.send('seu_token_aqui:EXCLUIR_GLOBAL:{"usuarios":[{"usuario":"teste2","uuid": null},{"usuario":"teste1","uuid": null}]}');
     };
     ```
-
 
 ### Sincronização
 
@@ -74,6 +83,19 @@
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001/ws');
     socket.onopen = () => {
-        socket.send(JSON.stringify({ SINCRONIZAR:[{"login":"user1","senha":"password1","dias":30,"limite":5,"uuid":"uuid1"},{"login":"user2","senha":"password2","dias":30,"limite":5,"uuid": null}] }));
+        socket.send('seu_token_aqui:SINCRONIZAR:[{"login":"user1","senha":"password1","dias":30,"limite":5,"uuid":"uuid1"},{"login":"user2","senha":"password2","dias":30,"limite":5,"uuid": null}]');
+    };
+    ```
+
+### Editar
+
+- **Rota:** `EDITAR`
+- **Método:** WebSocket
+- **Descrição:** Esta rota recebe um usuário em json e edita as informações do usuário existente.
+- **Exemplo de uso:**
+    ```javascript
+    const socket = new WebSocket('ws://127.0.0.1:9001/ws');
+    socket.onopen = () => {
+        socket.send('seu_token_aqui:EDITAR:{"login_antigo": "teste2", "login_novo": "teste3", "senha": "nova_senha", "dias": 30, "limite": 1, "uuid": null}');
     };
     ```
