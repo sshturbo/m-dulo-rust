@@ -29,7 +29,7 @@
 
 - **Rota:** `CRIAR`
 - **Método:** WebSocket
-- **Descrição:** Cria um novo usuario.
+- **Descrição:** Esta rota recebe um usuario em json e cria um novo usuario.
 - **Exemplo de uso:**
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001/ws');
@@ -42,7 +42,7 @@
 
 - **Rota:** `EXCLUIR`
 - **Método:** WebSocket
-- **Descrição:** Remove um usuario por vez.
+- **Descrição:** Esta rota recebe um usuario em json e remove um usuario por vez.
 - **Exemplo de uso:**
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001/ws');
@@ -55,11 +55,25 @@
 
 - **Rota:** `EXCLUIR_GLOBAL`
 - **Método:** WebSocket
-- **Descrição:** Remove todos os usuarios de uma vez.
+- **Descrição:** Essa rota recebe uma listar de usuarios em json e remove todos os usuarios de uma vez.
 - **Exemplo de uso:**
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001/ws');
     socket.onopen = () => {
         socket.send(JSON.stringify({ EXCLUIR_GLOBAL:{"usuarios":[{"usuario":"teste2","uuid": null},{"usuario":"teste1","uuid": null}]} }));
+    };
+    ```
+
+
+### Sincronização
+
+- **Rota:** `SINCRONIZAR`
+- **Método:** WebSocket
+- **Descrição:** Esta rota recebe uma lista de usuarios em json e sincroniza todos os usuarios de uma vez se o usaurio ja existir ele e excluido e adicionado novamente.
+- **Exemplo de uso:**
+    ```javascript
+    const socket = new WebSocket('ws://127.0.0.1:9001/ws');
+    socket.onopen = () => {
+        socket.send(JSON.stringify({ SINCRONIZAR:[{"login":"user1","senha":"password1","dias":30,"limite":5,"uuid":"uuid1"},{"login":"user2","senha":"password2","dias":30,"limite":5,"uuid":"uuid2"}] }));
     };
     ```
