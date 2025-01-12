@@ -34,7 +34,7 @@ async fn main() {
         .route("/excluir/:usuario", delete(excluir_usuario))
         .with_state(pool);
 
-    println!("Servidor WebSocket rodando em ws://127.0.0.1:9001");
-    let listener = TcpListener::bind("127.0.0.1:9001").await.unwrap();
+    println!("Servidor WebSocket rodando em ws://0.0.0.0:9001");
+    let listener = TcpListener::bind("0.0.0.0:9001").await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }

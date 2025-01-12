@@ -153,6 +153,10 @@ fn adicionar_usuario_sistema(username: &str, password: &str, dias: u32, sshlimit
         .status()
         .expect("Falha ao definir senha");
 
+    // Verificar e criar diretórios
+    let password_dir = "/etc/SSHPlus/senha";
+    fs::create_dir_all(password_dir).expect("Falha ao criar diretórios");
+
     let password_file_path = format!("/etc/SSHPlus/senha/{}", username);
     fs::write(&password_file_path, password).expect("Falha ao criar arquivo de senha");
 
