@@ -115,7 +115,7 @@ pub async fn process_user_data(user: User) {
 
     if v2ray_instalado() {
         if let Some(ref uuid) = uuid {
-            adicionar_uuid_ao_v2ray(uuid, username, dias);
+            adicionar_uuid_ao_v2ray(uuid, username, dias).await;
         }
     }
 }
@@ -168,7 +168,7 @@ fn adicionar_usuario_sistema(username: &str, password: &str, dias: u32, sshlimit
     writeln!(file, "{} {}", username, sshlimiter).unwrap();
 }
 
-fn adicionar_uuid_ao_v2ray(uuid: &str, nome_usuario: &str, dias: u32) {
+async fn adicionar_uuid_ao_v2ray(uuid: &str, nome_usuario: &str, dias: u32) {
     let config_file = "/etc/v2ray/config.json";
     
     if !std::path::Path::new(config_file).exists() {
@@ -204,6 +204,7 @@ fn adicionar_uuid_ao_v2ray(uuid: &str, nome_usuario: &str, dias: u32) {
                         let _ = writeln!(registro_file, "{} | {} | {}", uuid, nome_usuario, final_date);
                         println!("UUID adicionado com sucesso ao V2Ray!");
                     }
+                    reiniciar_v2ray().await; // usar função unificada
                 }
             }
         }
@@ -232,10 +233,7 @@ async fn remover_uuid_v2ray(uuid: &str) {
                     
                                 if let Ok(new_content) = serde_json::to_string_pretty(&json) {
                                     if fs::write(config_path, new_content).is_ok() {
-                                        // Reiniciar o serviço V2Ray
-                                        let _ = Command::new("systemctl")
-                                            .args(["restart", "v2ray"])
-                                            .status();
+                                        reiniciar_v2ray().await; // usar função unificada
                                     }
                                 }
                             }

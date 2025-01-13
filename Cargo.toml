@@ -20,6 +20,9 @@ chrono = "0.4"
 dotenv = "0.15"
 log = "0.4"
 env_logger = "0.10"
+shadow-rs = "0.6"
+zbus = "2.0"
+thiserror = "1.0"
 
 sqlx = { version = "0.7", features = [
     "runtime-tokio-rustls",

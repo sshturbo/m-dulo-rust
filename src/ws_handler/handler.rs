@@ -61,7 +61,7 @@ async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result
         "CRIAR" => {
             let user: User = serde_json::from_str(dados)
                 .map_err(|_| "Dados de usuário inválidos".to_string())?;
-            criar_usuario(db, pool, user).await?;
+            criar_usuario(db, pool, user).await.map_err(|e| e.to_string())?;
             Ok("Usuário criado com sucesso!".to_string())
         },
         "EXCLUIR" => {
