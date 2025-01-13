@@ -91,7 +91,7 @@
 
 - **Rota:** `EDITAR`
 - **Método:** WebSocket
-- **Descrição:** Esta rota recebe um usuário em json e edita as informações do usuário existente.
+- **Descrição:** Esta rota recebe um usuário em json e edita as informações do usuário existente. O uuid do v2ray pode se passo e tambem pode ser passo como null.
 - **Exemplo de uso:**
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001');
