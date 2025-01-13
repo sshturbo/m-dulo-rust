@@ -25,13 +25,15 @@ pub fn adicionar_usuario_sistema(username: &str, password: &str, dias: u32, sshl
     Command::new("useradd")
         .args(["-M", "-s", "/bin/false", "-e", &final_date, username])
         .status()
-        .map_err(|_| "Falha ao criar usuário com useradd".to_string())?;
+        .map_err(|_| "Falha ao criar usuário com useradd".to_string())
+        .and_then(|status| if status.success() { Ok(()) } else { Err("Comando useradd falhou".to_string()) })?;
 
     Command::new("sh")
         .arg("-c")
         .arg(format!("echo \"{}:{}\" | chpasswd", username, password))
         .status()
-        .map_err(|_| "Falha ao definir senha com chpasswd".to_string())?;
+        .map_err(|_| "Falha ao definir senha com chpasswd".to_string())
+        .and_then(|status| if status.success() { Ok(()) } else { Err("Comando chpasswd falhou".to_string()) })?;
 
     fs::create_dir_all("/etc/SSHPlus/senha").map_err(|_| "Falha ao criar diretório de senha")?;
     fs::write(format!("/etc/SSHPlus/senha/{}", username), password)
