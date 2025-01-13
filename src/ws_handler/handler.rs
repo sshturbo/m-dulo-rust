@@ -17,7 +17,6 @@ use crate::models::delete::DeleteRequest;
 use crate::models::delete_global::ExcluirGlobalRequest;
 use crate::models::edit::EditRequest;
 use std::env;
-use crate::utils::restart_v2ray::reiniciar_v2ray;
 
 type Database = Arc<Mutex<HashMap<String, User>>>;
 
@@ -78,7 +77,6 @@ async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result
                 excluir_global_req
             ).await {
                 Ok(_) => {
-                    reiniciar_v2ray().await;
                     Ok("Usuários excluídos com sucesso!".to_string())
                 },
                 Err(e) => Err(e)

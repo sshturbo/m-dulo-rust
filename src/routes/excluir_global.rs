@@ -11,6 +11,7 @@ pub async fn excluir_global(
 ) -> Result<(), String> {
     let mut uuids_to_remove = Vec::new();
     let mut usuarios_existentes: Vec<String> = Vec::new();
+    let mut deve_reiniciar_v2ray = false;
 
     for usuario in &payload.usuarios {
         let user_exists = sqlx::query("SELECT 1 FROM users WHERE login = ?")
@@ -61,6 +62,10 @@ pub async fn excluir_global(
 
     if !uuids_to_remove.is_empty() {
         remover_uuids_v2ray(&uuids_to_remove).await;
+        deve_reiniciar_v2ray = true;
+    }
+
+    if deve_reiniciar_v2ray {
         reiniciar_v2ray().await;
     }
 
@@ -87,7 +92,8 @@ async fn remover_uuids_v2ray(uuids: &[String]) {
 
                                 if let Ok(new_content) = serde_json::to_string_pretty(&json) {
                                     if fs::write(config_path, new_content).is_ok() {
-                                        reiniciar_v2ray().await;
+                                        // Remover a chamada de reiniciar_v2ray daqui
+                                        // reiniciar_v2ray().await;
                                     }
                                 }
                             }
