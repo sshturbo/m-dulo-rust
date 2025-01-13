@@ -23,8 +23,12 @@ pub async fn excluir_usuario(
     }
 
     if let Some(uuid) = uuid {
-        remover_uuid_v2ray(&uuid).await;
-        reiniciar_v2ray().await; 
+        if std::path::Path::new("/etc/v2ray/config.json").exists() {
+            remover_uuid_v2ray(&uuid).await;
+            reiniciar_v2ray().await;
+        } else {
+            info!("Arquivo /etc/v2ray/config.json não encontrado, ignorando remoção de UUID e reinício do V2Ray");
+        }
     }
 
     let _ = Command::new("pkill")
@@ -35,7 +39,6 @@ pub async fn excluir_usuario(
         .arg(&usuario)
         .status()
         .map_err(|_| "Falha ao excluir usuário".to_string())?;
-
 
     match sqlx::query("DELETE FROM users WHERE login = ?")
         .bind(&usuario)

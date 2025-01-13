@@ -2,32 +2,41 @@ use sqlx::{Pool, Sqlite, SqlitePool};
 use std::fs;
 use std::path::Path;
 use std::os::unix::fs::PermissionsExt;
+use dotenv::dotenv;
+use std::env;
 
 async fn setup_database_dir() -> std::io::Result<()> {
-    let db_dir = Path::new("db");
+    dotenv().ok(); 
+    let database_url = env::var("DATABASE_URL")
+        .expect("DATABASE_URL não encontrada no .env");
+    
+    let db_path = Path::new(&database_url);
+    let db_dir = db_path.parent().unwrap();
+
     if !db_dir.exists() {
         fs::create_dir(db_dir)?;
         fs::set_permissions(db_dir, fs::Permissions::from_mode(0o755))?;
     }
 
-    let db_file = db_dir.join("banco.sqlite");
-    if !db_file.exists() {
-        fs::File::create(&db_file)?;
-        fs::set_permissions(&db_file, fs::Permissions::from_mode(0o644))?;
+    if !db_path.exists() {
+        fs::File::create(&db_path)?;
+        fs::set_permissions(&db_path, fs::Permissions::from_mode(0o644))?;
     }
 
     Ok(())
 }
 
 pub async fn initialize_db() -> Result<Pool<Sqlite>, sqlx::Error> {
+    dotenv().ok(); 
+    let database_url = env::var("DATABASE_URL")
+        .expect("DATABASE_URL não encontrada no .env");
+
     setup_database_dir()
         .await
         .expect("Falha ao criar diretório/arquivo do banco de dados");
 
-    let database_url = "sqlite:db/banco.sqlite";
-    let pool = SqlitePool::connect(database_url).await?;
+    let pool = SqlitePool::connect(&database_url).await?;
     
-    // Criar tabela se não existir
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY,

@@ -61,8 +61,10 @@ pub async fn excluir_global(
     }
 
     if !uuids_to_remove.is_empty() {
-        remover_uuids_v2ray(&uuids_to_remove).await;
-        deve_reiniciar_v2ray = true;
+        if std::path::Path::new("/etc/v2ray/config.json").exists() {
+            remover_uuids_v2ray(&uuids_to_remove).await;
+            deve_reiniciar_v2ray = true;
+        }
     }
 
     if deve_reiniciar_v2ray {
