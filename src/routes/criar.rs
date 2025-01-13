@@ -4,20 +4,33 @@ use std::collections::HashMap;
 use tokio::sync::Mutex;
 use std::sync::Arc;
 use crate::utils::user_utils::process_user_data;
+use thiserror::Error;
 
 pub type Database = Arc<Mutex<HashMap<String, User>>>;
 
-pub async fn criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Result<(), String> {
+#[derive(Error, Debug)]
+pub enum CriarError {
+    #[error("Erro ao verificar usuário: {0}")]
+    VerificarUsuario(String),
+    #[error("Usuário já existe no banco de dados!")]
+    UsuarioJaExiste,
+    #[error("Erro ao inserir usuário: {0}")]
+    InserirUsuario(String),
+    #[error("Erro ao processar dados do usuário")]
+    ProcessarDadosUsuario,
+}
+
+pub async fn criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Result<(), CriarError> {
     let mut db = db.lock().await;
 
     let existing_user = sqlx::query_scalar::<_, String>("SELECT login FROM users WHERE login = ?")
         .bind(&user.login)
         .fetch_optional(pool)
         .await
-        .map_err(|e| format!("Erro ao verificar usuário: {}", e))?;
+        .map_err(|e| CriarError::VerificarUsuario(e.to_string()))?;
 
     if existing_user.is_some() {
-        return Err("Usuário já existe no banco de dados!".to_string());
+        return Err(CriarError::UsuarioJaExiste);
     }
 
     sqlx::query(
@@ -30,10 +43,10 @@ pub async fn criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Res
     .bind(&user.uuid)
     .execute(pool)
     .await
-    .map_err(|e| format!("Erro ao inserir usuário: {}", e))?;
+    .map_err(|e| CriarError::InserirUsuario(e.to_string()))?;
 
     db.insert(user.login.clone(), user.clone());
     println!("Usuário criado com sucesso!");
-    process_user_data(user).await?;
+    process_user_data(user).await.map_err(|_| CriarError::ProcessarDadosUsuario)?;
     Ok(())
 }

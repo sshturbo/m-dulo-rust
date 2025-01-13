@@ -5,21 +5,32 @@ use log::{info, error};
 use std::fs;
 use serde_json::Value;
 use crate::utils::restart_v2ray::reiniciar_v2ray;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum ExcluirError {
+    #[error("Falha ao executar comando")]
+    FalhaComando,
+    #[error("Usuário não encontrado no sistema")]
+    UsuarioNaoEncontrado,
+    #[error("Erro ao excluir usuário do banco: {0}")]
+    ExcluirUsuarioBanco(String),
+}
 
 pub async fn excluir_usuario(
     Path((usuario, uuid)): Path<(String, Option<String>)>,
     State(pool): State<Pool<Sqlite>>,
-) -> Result<String, String> {
+) -> Result<String, ExcluirError> {
     info!("Tentativa de exclusão do usuário {}", usuario);
 
     let output = Command::new("id")
         .arg(&usuario)
         .output()
-        .map_err(|_| "Falha ao executar comando".to_string())?;
+        .map_err(|_| ExcluirError::FalhaComando)?;
 
     if !output.status.success() {
         error!("Usuário {} não encontrado no sistema", usuario);
-        return Err("Usuário não encontrado no sistema".to_string());
+        return Err(ExcluirError::UsuarioNaoEncontrado);
     }
 
     if let Some(uuid) = uuid {
@@ -38,22 +49,16 @@ pub async fn excluir_usuario(
     let _ = Command::new("userdel")
         .arg(&usuario)
         .status()
-        .map_err(|_| "Falha ao excluir usuário".to_string())?;
+        .map_err(|_| ExcluirError::FalhaComando)?;
 
-    match sqlx::query("DELETE FROM users WHERE login = ?")
+    sqlx::query("DELETE FROM users WHERE login = ?")
         .bind(&usuario)
         .execute(&pool)
         .await
-    {
-        Ok(_) => {
-            info!("Usuário {} excluído com sucesso", usuario);
-            Ok("Usuário excluído com sucesso".to_string())
-        }
-        Err(e) => {
-            error!("Erro ao excluir usuário {} do banco: {}", usuario, e);
-            Err(format!("Erro ao excluir usuário do banco: {}", e))
-        }
-    }
+        .map_err(|e| ExcluirError::ExcluirUsuarioBanco(e.to_string()))?;
+
+    info!("Usuário {} excluído com sucesso", usuario);
+    Ok("Usuário excluído com sucesso".to_string())
 }
 
 async fn remover_uuid_v2ray(uuid: &str) {

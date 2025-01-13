@@ -9,10 +9,27 @@ use std::io::Write;
 use chrono::{Duration, Utc};
 use crate::utils::restart_v2ray::reiniciar_v2ray;
 use crate::utils::email::gerar_email_aleatorio;
+use thiserror::Error;
 
 pub type Database = Arc<Mutex<HashMap<String, User>>>;
 
-pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: Vec<User>) -> Result<(), String> {
+#[derive(Error, Debug)]
+pub enum SyncError {
+    #[error("Erro ao verificar usuário: {0}")]
+    VerificarUsuario(String),
+    #[error("Erro ao excluir usuário do banco: {0}")]
+    ExcluirUsuarioBanco(String),
+    #[error("Erro ao inserir usuário no banco de dados: {0}")]
+    InserirUsuarioBanco(String),
+    #[error("Usuário não encontrado no sistema")]
+    UsuarioNaoEncontrado,
+    #[error("Falha ao executar comando")]
+    FalhaComando,
+    #[error("Erro ao processar dados do usuário")]
+    ProcessarDadosUsuario,
+}
+
+pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: Vec<User>) -> Result<(), SyncError> {
     let mut deve_reiniciar_v2ray = false;
 
     for user in usuarios {
@@ -31,12 +48,12 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
     Ok(())
 }
 
-pub async fn verificar_e_criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Result<(), String> {
+pub async fn verificar_e_criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Result<(), SyncError> {
     let existing_user = sqlx::query_scalar::<_, String>("SELECT login FROM users WHERE login = ?")
         .bind(&user.login)
         .fetch_optional(pool)
         .await
-        .map_err(|e| format!("Erro ao verificar usuário: {}", e))?;
+        .map_err(|e| SyncError::VerificarUsuario(e.to_string()))?;
 
     if existing_user.is_some() {
         excluir_usuario_sistema(&user.login, &user.uuid, pool).await?;
@@ -45,14 +62,14 @@ pub async fn verificar_e_criar_usuario(db: Database, pool: &Pool<Sqlite>, user: 
     criar_usuario(db, pool, user).await
 }
 
-pub async fn excluir_usuario_sistema(usuario: &str, uuid: &Option<String>, pool: &Pool<Sqlite>) -> Result<(), String> {
+pub async fn excluir_usuario_sistema(usuario: &str, uuid: &Option<String>, pool: &Pool<Sqlite>) -> Result<(), SyncError> {
     let output = Command::new("id")
         .arg(usuario)
         .output()
-        .expect("Falha ao executar comando");
+        .map_err(|_| SyncError::FalhaComando)?;
 
     if !output.status.success() {
-        return Err("Usuário não encontrado no sistema".to_string());
+        return Err(SyncError::UsuarioNaoEncontrado);
     }
 
     if let Some(uuid) = uuid {
@@ -68,22 +85,21 @@ pub async fn excluir_usuario_sistema(usuario: &str, uuid: &Option<String>, pool:
     let _ = Command::new("userdel")
         .arg(usuario)
         .status()
-        .expect("Falha ao excluir usuário");
+        .map_err(|_| SyncError::FalhaComando)?;
 
-    match sqlx::query("DELETE FROM users WHERE login = ?")
+    sqlx::query("DELETE FROM users WHERE login = ?")
         .bind(usuario)
         .execute(pool)
         .await
-    {
-        Ok(_) => Ok(()),
-        Err(e) => Err(format!("Erro ao excluir usuário do banco: {}", e))
-    }
+        .map_err(|e| SyncError::ExcluirUsuarioBanco(e.to_string()))?;
+
+    Ok(())
 }
 
-pub async fn criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Result<(), String> {
+pub async fn criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Result<(), SyncError> {
     let mut db = db.lock().await;
 
-    let result = sqlx::query(
+    sqlx::query(
         "INSERT INTO users (login, senha, dias, limite, uuid) VALUES (?, ?, ?, ?, ?)"
     )
     .bind(&user.login)
@@ -92,20 +108,16 @@ pub async fn criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Res
     .bind(user.limite as i64)
     .bind(&user.uuid)
     .execute(pool)
-    .await;
+    .await
+    .map_err(|e| SyncError::InserirUsuarioBanco(e.to_string()))?;
 
-    match result {
-        Ok(_) => {
-            db.insert(user.login.clone(), user.clone());
-            println!("Usuário criado com sucesso!");
-            process_user_data(user).await;
-            Ok(())
-        }
-        Err(e) => Err(format!("Erro ao inserir usuário no banco de dados: {}", e))
-    }
+    db.insert(user.login.clone(), user.clone());
+    println!("Usuário criado com sucesso!");
+    process_user_data(user).await.map_err(|_| SyncError::ProcessarDadosUsuario)?;
+    Ok(())
 }
 
-pub async fn process_user_data(user: User) {
+pub async fn process_user_data(user: User) -> Result<(), SyncError> {
     let username = &user.login;
     let password = &user.senha;
     let dias = user.dias;
@@ -119,6 +131,8 @@ pub async fn process_user_data(user: User) {
             adicionar_uuid_ao_v2ray(uuid, username, dias).await;
         }
     }
+
+    Ok(())
 }
 
 fn adicionar_usuario_sistema(username: &str, password: &str, dias: u32, sshlimiter: u32) {

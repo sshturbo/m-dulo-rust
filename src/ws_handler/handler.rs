@@ -17,8 +17,37 @@ use crate::models::delete::DeleteRequest;
 use crate::models::delete_global::ExcluirGlobalRequest;
 use crate::models::edit::EditRequest;
 use std::env;
+use thiserror::Error;
 
 type Database = Arc<Mutex<HashMap<String, User>>>;
+
+#[derive(Error, Debug)]
+pub enum WsHandlerError {
+    #[error("Token não configurado")]
+    TokenNaoConfigurado,
+    #[error("Token inválido")]
+    TokenInvalido,
+    #[error("Formato inválido. Use TOKEN:COMANDO:DADOS (exemplo: TOKEN:CRIAR:{{...}})")]
+    FormatoInvalido,
+    #[error("Dados de usuário inválidos")]
+    DadosUsuarioInvalidos,
+    #[error("Dados de exclusão inválidos")]
+    DadosExclusaoInvalidos,
+    #[error("Dados de exclusão global inválidos")]
+    DadosExclusaoGlobalInvalidos,
+    #[error("Dados de edição inválidos")]
+    DadosEdicaoInvalidos,
+    #[error("Erro ao criar usuário: {0}")]
+    CriarUsuario(#[from] crate::routes::criar::CriarError),
+    #[error("Erro ao excluir usuário: {0}")]
+    ExcluirUsuario(#[from] crate::routes::excluir::ExcluirError),
+    #[error("Erro ao excluir usuários globais: {0}")]
+    ExcluirGlobal(#[from] crate::routes::excluir_global::ExcluirGlobalError),
+    #[error("Erro ao sincronizar usuários: {0}")]
+    SincronizarUsuarios(#[from] crate::routes::sincronizar::SyncError),
+    #[error("Erro ao editar usuário: {0}")]
+    EditarUsuario(#[from] crate::routes::editar::EditarError),
+}
 
 pub async fn websocket_handler(
     ws: WebSocketUpgrade,
@@ -37,63 +66,56 @@ async fn handle_socket(
         if let Message::Text(text) = msg {
             let response = match handle_message(&text, db.clone(), &pool).await {
                 Ok(msg) => msg,
-                Err(e) => e,
+                Err(e) => e.to_string(),
             };
             let _ = socket.send(Message::Text(response)).await;
         }
     }
 }
 
-async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result<String, String> {
+async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result<String, WsHandlerError> {
     let parts: Vec<&str> = text.splitn(3, ':').collect();
     if parts.len() != 3 {
-        return Err("Formato inválido. Use TOKEN:COMANDO:DADOS (exemplo: TOKEN:CRIAR:{...})".to_string());
+        return Err(WsHandlerError::FormatoInvalido);
     }
 
     let (token, comando, dados) = (parts[0], parts[1], parts[2]);
     
-    let expected_token = env::var("API_TOKEN").map_err(|_| "Token não configurado".to_string())?;
+    let expected_token = env::var("API_TOKEN").map_err(|_| WsHandlerError::TokenNaoConfigurado)?;
     if token != expected_token {
-        return Err("Token inválido".to_string());
+        return Err(WsHandlerError::TokenInvalido);
     }
 
     match comando {
         "CRIAR" => {
             let user: User = serde_json::from_str(dados)
-                .map_err(|_| "Dados de usuário inválidos".to_string())?;
-            criar_usuario(db, pool, user).await.map_err(|e| e.to_string())?;
+                .map_err(|_| WsHandlerError::DadosUsuarioInvalidos)?;
+            criar_usuario(db, pool, user).await?;
             Ok("Usuário criado com sucesso!".to_string())
         },
         "EXCLUIR" => {
             let delete_req: DeleteRequest = serde_json::from_str(dados)
-                .map_err(|_| "Dados de exclusão inválidos".to_string())?;
-            excluir_usuario(Path((delete_req.usuario, delete_req.uuid)), State(pool.clone())).await 
+                .map_err(|_| WsHandlerError::DadosExclusaoInvalidos)?;
+            excluir_usuario(Path((delete_req.usuario, delete_req.uuid)), State(pool.clone())).await.map_err(WsHandlerError::ExcluirUsuario)
         },
         "EXCLUIR_GLOBAL" => {
             let excluir_global_req: ExcluirGlobalRequest = serde_json::from_str(dados)
-                .map_err(|_| "Dados de exclusão global inválidos".to_string())?;
-            match excluir_global(
-                pool.clone(),
-                excluir_global_req
-            ).await {
-                Ok(_) => {
-                    Ok("Usuários excluídos com sucesso!".to_string())
-                },
-                Err(e) => Err(e)
-            }
+                .map_err(|_| WsHandlerError::DadosExclusaoGlobalInvalidos)?;
+            excluir_global(pool.clone(), excluir_global_req).await.map_err(WsHandlerError::ExcluirGlobal)?;
+            Ok("Usuários excluídos com sucesso!".to_string())
         },
         "SINCRONIZAR" => {
             let usuarios: Vec<User> = serde_json::from_str(dados)
-                .map_err(|_| "Dados de usuários inválidos".to_string())?;
+                .map_err(|_| WsHandlerError::DadosUsuarioInvalidos)?;
             sincronizar_usuarios(db, pool, usuarios).await?;
             Ok("Usuários sincronizados com sucesso!".to_string())
         },
         "EDITAR" => {
             let edit_req: EditRequest = serde_json::from_str(dados)
-                .map_err(|_| "Dados de edição inválidos".to_string())?;
+                .map_err(|_| WsHandlerError::DadosEdicaoInvalidos)?;
             editar_usuario(db, pool, edit_req).await?;
             Ok("Usuário editado com sucesso!".to_string())
         },
-        _ => Err("Comando não reconhecido. Use CRIAR, EXCLUIR, EXCLUIR_GLOBAL, SINCRONIZAR ou EDITAR".to_string())
+        _ => Err(WsHandlerError::FormatoInvalido)
     }
 }

@@ -10,7 +10,8 @@ async fn setup_database_dir() -> std::io::Result<()> {
     let database_url = env::var("DATABASE_URL")
         .expect("DATABASE_URL não encontrada no .env");
     
-    let db_path = Path::new(&database_url);
+    let db_path_str = database_url.trim_start_matches("sqlite:");
+    let db_path = Path::new(db_path_str);
     let db_dir = db_path.parent().unwrap();
 
     if !db_dir.exists() {

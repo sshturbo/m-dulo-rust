@@ -6,24 +6,37 @@ use std::collections::HashMap;
 use tokio::sync::Mutex;
 use std::sync::Arc;
 use crate::utils::user_utils::process_user_data;
+use thiserror::Error;
 
 pub type Database = Arc<Mutex<HashMap<String, User>>>;
+
+#[derive(Error, Debug)]
+pub enum EditarError {
+    #[error("Erro ao verificar usuário: {0}")]
+    VerificarUsuario(String),
+    #[error("Usuário antigo não encontrado no banco de dados!")]
+    UsuarioNaoEncontrado,
+    #[error("Erro ao atualizar usuário no banco de dados: {0}")]
+    AtualizarUsuarioBanco(String),
+    #[error("Erro ao processar dados do usuário")]
+    ProcessarDadosUsuario,
+}
 
 pub async fn editar_usuario(
     db: Database,
     pool: &Pool<Sqlite>,
     edit_req: EditRequest
-) -> Result<(), String> {
+) -> Result<(), EditarError> {
     let mut db = db.lock().await;
 
     let existing_user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE login = ?")
         .bind(&edit_req.login_antigo)
         .fetch_optional(pool)
         .await
-        .map_err(|e| format!("Erro ao verificar usuário: {}", e))?;
+        .map_err(|e| EditarError::VerificarUsuario(e.to_string()))?;
 
     if existing_user.is_none() {
-        return Err("Usuário antigo não encontrado no banco de dados!".to_string());
+        return Err(EditarError::UsuarioNaoEncontrado);
     }
 
     let _ = Command::new("pkill")
@@ -59,9 +72,9 @@ pub async fn editar_usuario(
         Ok(_) => {
             db.insert(new_user.login.clone(), new_user.clone());
             println!("Usuário editado com sucesso!");
-            process_user_data(new_user).await?;
+            process_user_data(new_user).await.map_err(|_| EditarError::ProcessarDadosUsuario)?;
             Ok(())
         }
-        Err(e) => Err(format!("Erro ao atualizar usuário no banco de dados: {}", e))
+        Err(e) => Err(EditarError::AtualizarUsuarioBanco(e.to_string()))
     }
 }
