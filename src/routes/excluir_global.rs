@@ -3,6 +3,7 @@ use std::process::Command;
 use std::fs;
 use serde_json::Value;
 use crate::models::delete_global::ExcluirGlobalRequest;
+use crate::utils::restart_v2ray::reiniciar_v2ray;
 
 pub async fn excluir_global(
     pool: Pool<Sqlite>,
@@ -60,6 +61,7 @@ pub async fn excluir_global(
 
     if !uuids_to_remove.is_empty() {
         remover_uuids_v2ray(&uuids_to_remove).await;
+        reiniciar_v2ray().await;
     }
 
     Ok(())
@@ -85,9 +87,7 @@ async fn remover_uuids_v2ray(uuids: &[String]) {
 
                                 if let Ok(new_content) = serde_json::to_string_pretty(&json) {
                                     if fs::write(config_path, new_content).is_ok() {
-                                        let _ = Command::new("systemctl")
-                                            .args(["restart", "v2ray"])
-                                            .status();
+                                        reiniciar_v2ray().await;
                                     }
                                 }
                             }

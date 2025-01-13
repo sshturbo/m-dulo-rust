@@ -17,6 +17,7 @@ use crate::models::delete::DeleteRequest;
 use crate::models::delete_global::ExcluirGlobalRequest;
 use crate::models::edit::EditRequest;
 use std::env;
+use crate::utils::restart_v2ray::reiniciar_v2ray;
 
 type Database = Arc<Mutex<HashMap<String, User>>>;
 
@@ -67,7 +68,7 @@ async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result
         "EXCLUIR" => {
             let delete_req: DeleteRequest = serde_json::from_str(dados)
                 .map_err(|_| "Dados de exclusão inválidos".to_string())?;
-            excluir_usuario(Path((delete_req.usuario, delete_req.uuid)), State(pool.clone())).await // Simplificado
+            excluir_usuario(Path((delete_req.usuario, delete_req.uuid)), State(pool.clone())).await 
         },
         "EXCLUIR_GLOBAL" => {
             let excluir_global_req: ExcluirGlobalRequest = serde_json::from_str(dados)
@@ -76,7 +77,10 @@ async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result
                 pool.clone(),
                 excluir_global_req
             ).await {
-                Ok(_) => Ok("Usuários excluídos com sucesso!".to_string()),
+                Ok(_) => {
+                    reiniciar_v2ray().await;
+                    Ok("Usuários excluídos com sucesso!".to_string())
+                },
                 Err(e) => Err(e)
             }
         },

@@ -6,8 +6,9 @@ use std::sync::Arc;
 use std::process::Command;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use rand::{distributions::Alphanumeric, Rng};
 use chrono::{Duration, Utc};
+use crate::utils::restart_v2ray::reiniciar_v2ray;
+use crate::utils::email::gerar_email_aleatorio;
 
 pub type Database = Arc<Mutex<HashMap<String, User>>>;
 
@@ -120,15 +121,6 @@ pub async fn process_user_data(user: User) {
     }
 }
 
-fn gerar_email_aleatorio(tamanho: usize) -> String {
-    let local: String = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(tamanho)
-        .map(char::from)
-        .collect();
-    format!("{}@gmail.com", local)
-}
-
 fn adicionar_usuario_sistema(username: &str, password: &str, dias: u32, sshlimiter: u32) {
     let final_date = (Utc::now() + Duration::days(dias as i64)).format("%Y-%m-%d").to_string();
 
@@ -195,7 +187,7 @@ async fn adicionar_uuid_ao_v2ray(uuid: &str, nome_usuario: &str, dias: u32) {
                     }));
                 }
                 
-                if let Ok(_) = fs::write(config_file, serde_json::to_string_pretty(&json_value).unwrap()) {
+                if fs::write(config_file, serde_json::to_string_pretty(&json_value).unwrap()).is_ok() {
                     if let Ok(mut registro_file) = OpenOptions::new()
                         .append(true)
                         .create(true)
@@ -204,7 +196,7 @@ async fn adicionar_uuid_ao_v2ray(uuid: &str, nome_usuario: &str, dias: u32) {
                         let _ = writeln!(registro_file, "{} | {} | {}", uuid, nome_usuario, final_date);
                         println!("UUID adicionado com sucesso ao V2Ray!");
                     }
-                    reiniciar_v2ray().await; // usar função unificada
+                    reiniciar_v2ray().await;
                 }
             }
         }
@@ -243,14 +235,6 @@ async fn remover_uuid_v2ray(uuid: &str) {
             }
         }
     }
-}
-
-async fn reiniciar_v2ray() {
-    let _ = Command::new("systemctl")
-        .arg("restart")
-        .arg("v2ray")
-        .status()
-        .expect("Falha ao reiniciar o serviço V2Ray");
 }
 
 fn v2ray_instalado() -> bool {

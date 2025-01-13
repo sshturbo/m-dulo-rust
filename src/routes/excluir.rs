@@ -4,6 +4,7 @@ use std::process::Command;
 use log::{info, error};
 use std::fs;
 use serde_json::Value;
+use crate::utils::restart_v2ray::reiniciar_v2ray;
 
 pub async fn excluir_usuario(
     Path((usuario, uuid)): Path<(String, Option<String>)>,
@@ -23,6 +24,7 @@ pub async fn excluir_usuario(
 
     if let Some(uuid) = uuid {
         remover_uuid_v2ray(&uuid).await;
+        reiniciar_v2ray().await; 
     }
 
     let _ = Command::new("pkill")
@@ -68,11 +70,7 @@ async fn remover_uuid_v2ray(uuid: &str) {
                                 clients_array.retain(|client| client["id"].as_str().unwrap_or("") != uuid);
 
                                 if let Ok(new_content) = serde_json::to_string_pretty(&json) {
-                                    if fs::write(config_path, new_content).is_ok() {
-                                        let _ = Command::new("systemctl")
-                                            .args(["restart", "v2ray"])
-                                            .status();
-                                    }
+                                    let _ = fs::write(config_path, new_content);
                                 }
                             }
                         }
