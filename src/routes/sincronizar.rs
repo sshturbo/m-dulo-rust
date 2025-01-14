@@ -210,8 +210,6 @@ async fn adicionar_uuid_ao_v2ray(uuid: &str, nome_usuario: &str, dias: u32) {
                         let _ = writeln!(registro_file, "{} | {} | {}", uuid, nome_usuario, final_date);
                         println!("UUID adicionado com sucesso ao V2Ray!");
                     }
-                    // Remover a chamada de reiniciar_v2ray daqui
-                    // reiniciar_v2ray().await;
                 }
             }
         }
@@ -240,8 +238,6 @@ async fn remover_uuid_v2ray(uuid: &str) {
                     
                                 if let Ok(new_content) = serde_json::to_string_pretty(&json) {
                                     if fs::write(config_path, new_content).is_ok() {
-                                        // Remover a chamada de reiniciar_v2ray daqui
-                                        // reiniciar_v2ray().await;
                                     }
                                 }
                             }

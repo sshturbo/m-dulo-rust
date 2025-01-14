@@ -9,7 +9,7 @@ use std::fs;
 use serde_json::Value;
 use thiserror::Error;
 use serde::Serialize;
-use log::info; // Adicione esta linha
+// use log::info; 
 
 #[derive(Error, Debug)]
 pub enum MonitorError {
@@ -25,7 +25,6 @@ pub enum MonitorError {
     JsonError(#[from] serde_json::Error),
 }
 
-// Tornando o tipo `OnlineUser` público para ser usado em outros módulos
 #[derive(Serialize)]
 pub struct OnlineUser {
     pub login: String,
@@ -47,7 +46,7 @@ async fn get_online_inicio(pool: &SqlitePool, user: &str) -> Result<Option<Naive
 }
 
 pub async fn monitor_users(pool: Pool<Sqlite>) -> Result<Vec<OnlineUser>, MonitorError> {
-    info!("Iniciando monitoramento de usuários"); // Adicione esta linha
+    // info!("Iniciando monitoramento de usuários");
     let mut interval = interval(Duration::from_secs(1));
     let mut online_users = Vec::new();
 
@@ -56,7 +55,7 @@ pub async fn monitor_users(pool: Pool<Sqlite>) -> Result<Vec<OnlineUser>, Monito
     match get_users() {
         Ok(users) => {
             if users.is_empty() {
-                info!("Nenhum usuário online no momento.");
+                // info!("Nenhum usuário online no momento.");
             } else {
                 let user_list: Vec<&str> = users.split(',').collect();
                 let mut user_count = std::collections::HashMap::new();
@@ -80,7 +79,6 @@ pub async fn monitor_users(pool: Pool<Sqlite>) -> Result<Vec<OnlineUser>, Monito
                         let dias = user_info.dias;
                         let uuid = user_info.uuid.as_deref();
 
-                        // Verifica validade do usuário
                         let expiration_date = Local::now().naive_local() + ChronoDuration::days(dias as i64);
                         if Local::now().naive_local() > expiration_date {
                             execute_command("pkill", &["-u", user])?;

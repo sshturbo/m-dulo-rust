@@ -28,12 +28,12 @@ use axum::{
 use tokio::net::TcpListener;
 use crate::db::initialize_db;
 use crate::ws_handler::handler::websocket_handler;
-use crate::ws_handler::handler::websocket_online_handler; // Adicione esta linha
-use env_logger::Env; // Adicione esta linha
+use crate::ws_handler::handler::websocket_online_handler;
+use env_logger::Env; 
 
 #[tokio::main]
 async fn main() {
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init(); // Modifique esta linha
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     dotenv::dotenv().ok();
     
     let pool = initialize_db()

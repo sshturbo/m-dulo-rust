@@ -109,8 +109,6 @@ async fn remover_uuids_v2ray(uuids: &[String]) {
 
                                 if let Ok(new_content) = serde_json::to_string_pretty(&json) {
                                     if fs::write(config_path, new_content).is_ok() {
-                                        // Remover a chamada de reiniciar_v2ray daqui
-                                        // reiniciar_v2ray().await;
                                     }
                                 }
                             }

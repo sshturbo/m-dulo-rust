@@ -20,7 +20,7 @@ use std::env;
 use thiserror::Error;
 use crate::routes::online::monitor_users;
 use tokio::time::Duration;
-use log::info; // Adicione esta linha
+use log::info;
 
 type Database = Arc<Mutex<HashMap<String, User>>>;
 
@@ -90,7 +90,7 @@ async fn handle_online_socket(
     info!("Cliente conectado ao WebSocket /online");
 
     loop {
-        info!("Chamando monitor_users");
+       // info!("Chamando monitor_users");
         let online_users = match monitor_users(pool.clone()).await {
             Ok(users) => {
                 if users.is_empty() {
@@ -101,8 +101,8 @@ async fn handle_online_socket(
             },
             Err(e) => serde_json::json!({"error": e.to_string()}).to_string(),
         };
-        info!("Verificação de usuários online realizada.");
-        info!("Enviando usuários online: {}", online_users);
+        // info!("Verificação de usuários online realizada.");
+        // info!("Enviando usuários online: {}", online_users);
         if let Err(e) = socket.send(Message::Text(online_users.clone())).await {
             info!("Erro ao enviar mensagem: {}", e);
             break;

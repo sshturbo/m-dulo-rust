@@ -99,3 +99,19 @@
         socket.send('seu_token_aqui:EDITAR:{"login_antigo": "teste2", "login_novo": "teste3", "senha": "nova_senha", "dias": 30, "limite": 1, "uuid": null}');
     };
     ```
+
+### Online
+
+- **Rota:** `ONLINE`
+- **Método:** WebSocket
+- **Descrição:** Esta rota se conecta ao WebSocket `ws://127.0.0.1:9001/online` e começa a enviar uma lista de usuários online em JSON com o login, limite e o tempo que está online. Se não houver nenhum usuário online, retorna a mensagem em JSON `{"message":"Nenhum usuário online no momento."}`.
+- **Exemplo de uso:**
+    ```javascript
+    const socket = new WebSocket('ws://127.0.0.1:9001/online');
+    socket.onopen = () => {
+        console.log('Conectado ao servidor para verificar usuários online.');
+    };
+    socket.onmessage = (event) => {
+        console.log('Usuários online:', event.data);
+    };
+    ```

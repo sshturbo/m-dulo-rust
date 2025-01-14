@@ -1,7 +1,6 @@
 use std::process::Command;
 
 pub async fn reiniciar_v2ray() {
-    // Verifica se o V2Ray está instalado
     let check_status = Command::new("systemctl")
         .arg("status")
         .arg("v2ray.service")

@@ -8,7 +8,6 @@ pub struct Usuario {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExcluirGlobalRequest {
-    // Lista de usuários a serem excluídos globalmente
     pub usuarios: Vec<Usuario>,
 }
 
