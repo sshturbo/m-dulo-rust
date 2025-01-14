@@ -45,7 +45,21 @@ pub async fn initialize_db() -> Result<Pool<Sqlite>, sqlx::Error> {
             senha TEXT NOT NULL,
             dias INTEGER NOT NULL,
             limite INTEGER NOT NULL,
-            uuid TEXT
+            uuid TEXT,
+            suspenso TEXT DEFAULT 'não'
+        )"
+    )
+    .execute(&pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS online (
+            id INTEGER PRIMARY KEY,
+            login TEXT NOT NULL UNIQUE,
+            limite TEXT NOT NULL,
+            online_inicio TIMESTAMP,
+            online_fim TIMESTAMP,
+            online TEXT DEFAULT 'off'
         )"
     )
     .execute(&pool)
