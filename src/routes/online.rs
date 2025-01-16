@@ -9,7 +9,6 @@ use std::fs;
 use serde_json::Value;
 use thiserror::Error;
 use serde::Serialize;
-// use log::info; 
 
 #[derive(Error, Debug)]
 pub enum MonitorError {
@@ -46,7 +45,6 @@ async fn get_online_inicio(pool: &SqlitePool, user: &str) -> Result<Option<Naive
 }
 
 pub async fn monitor_users(pool: Pool<Sqlite>) -> Result<Vec<OnlineUser>, MonitorError> {
-    // info!("Iniciando monitoramento de usuários");
     let mut interval = interval(Duration::from_secs(1));
     let mut online_users = Vec::new();
 
@@ -55,7 +53,7 @@ pub async fn monitor_users(pool: Pool<Sqlite>) -> Result<Vec<OnlineUser>, Monito
     match get_users() {
         Ok(users) => {
             if users.is_empty() {
-                // info!("Nenhum usuário online no momento.");
+                // No users online
             } else {
                 let user_list: Vec<&str> = users.split(',').collect();
                 let mut user_count = std::collections::HashMap::new();
@@ -67,85 +65,129 @@ pub async fn monitor_users(pool: Pool<Sqlite>) -> Result<Vec<OnlineUser>, Monito
                 online_users.clear();
 
                 for (user, count) in user_count {
-                    let user_info = sqlx::query!(
-                        "SELECT limite, dias, uuid FROM users WHERE login = ?",
-                        user
-                    )
-                    .fetch_optional(&pool)
-                    .await.map_err(MonitorError::DatabaseError)?;
-
-                    if let Some(user_info) = user_info {
-                        let limite = user_info.limite;
-                        let dias = user_info.dias;
-                        let uuid = user_info.uuid.as_deref();
-
-                        let expiration_date = Local::now().naive_local() + ChronoDuration::days(dias as i64);
-                        if Local::now().naive_local() > expiration_date {
-                            execute_command("pkill", &["-u", user])?;
-                            execute_command("userdel", &[user])?;
-
-                            sqlx::query!(
-                                "UPDATE users SET suspenso = 'sim' WHERE login = ?",
-                                user
-                            )
-                            .execute(&pool)
-                            .await.map_err(MonitorError::DatabaseError)?;
-
-                            if let Some(uuid) = uuid {
-                                remover_uuid_v2ray(uuid).await?;
-                            }
-                        } else if count > limite {
-                            execute_command("pkill", &["-u", user])?;
-                        } else {
-                            let now = Local::now().naive_local().format("%Y-%m-%d %H:%M:%S").to_string();
-                            let limite_count = format!("{}/{}", limite, count);
-                            sqlx::query!(
-                                "INSERT INTO online (login, limite, online_inicio, online_fim, online) VALUES (?, ?, ?, NULL, 'on')
-                                ON CONFLICT(login) DO UPDATE SET limite = ?, online_inicio = ?, online = 'on'",
-                                user,
-                                limite_count,
-                                now,
-                                limite_count,
-                                now
-                            )
-                            .execute(&pool)
-                            .await.map_err(MonitorError::DatabaseError)?;
-
-                            if let Some(online_inicio) = get_online_inicio(&pool, user).await? {
-                                let duration = Local::now().naive_local().signed_duration_since(online_inicio);
-                                let hours = duration.num_hours();
-                                let minutes = duration.num_minutes() % 60;
-                                let seconds = duration.num_seconds() % 60;
-                                let tempo_online = format!("usuário online há {} horas {} minutos e {} segundos", hours, minutes, seconds);
-
-                                online_users.push(OnlineUser {
-                                    login: user.to_string(),
-                                    limite: limite_count,
-                                    tempo_online,
-                                });
-                            }
-                        }
+                    if let Some(user_info) = fetch_user_info(&pool, user).await? {
+                        process_user_info(&pool, &mut online_users, user, count, user_info).await?;
                     }
                 }
 
-                // Marcar usuários offline
-                let now = Local::now().naive_local().format("%Y-%m-%d %H:%M:%S").to_string();
-                let user_list_string = user_list.join(",");
-                sqlx::query!(
-                    "UPDATE online SET online = 'off', online_fim = ? WHERE online = 'on' AND login NOT IN (?)",
-                    now,
-                    user_list_string
-                )
-                .execute(&pool)
-                .await.map_err(MonitorError::DatabaseError)?;
-
-                reiniciar_v2ray().await;
+                mark_users_offline(&pool, &user_list).await?;
+                if fs::metadata("/etc/v2ray/config.json").is_ok() {
+                    reiniciar_v2ray().await;
+                }
             }
         }
         Err(e) => eprintln!("Erro ao obter usuários: {}", e),
     }
 
     Ok(online_users)
+}
+
+async fn fetch_user_info(pool: &SqlitePool, user: &str) -> Result<Option<UserInfo>, MonitorError> {
+    let user_info = sqlx::query!(
+        "SELECT limite, dias, uuid FROM users WHERE login = ?",
+        user
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(MonitorError::DatabaseError)?;
+
+    Ok(user_info)
+}
+
+async fn process_user_info(
+    pool: &SqlitePool,
+    online_users: &mut Vec<OnlineUser>,
+    user: &str,
+    count: i32,
+    user_info: UserInfo
+) -> Result<(), MonitorError> {
+    let limite = user_info.limite;
+    let dias = user_info.dias;
+    let uuid = user_info.uuid.as_deref();
+
+    let expiration_date = Local::now().naive_local() + ChronoDuration::days(dias as i64);
+    if Local::now().naive_local() > expiration_date {
+        suspend_user(pool, user, uuid).await?;
+    } else if count > limite {
+        execute_command("pkill", &["-u", user])?;
+    } else {
+        update_user_online_status(pool, online_users, user, limite, count).await?;
+    }
+
+    Ok(())
+}
+
+async fn suspend_user(pool: &SqlitePool, user: &str, uuid: Option<&str>) -> Result<(), MonitorError> {
+    execute_command("pkill", &["-u", user])?;
+    execute_command("userdel", &[user])?;
+
+    sqlx::query!(
+        "UPDATE users SET suspenso = 'sim' WHERE login = ?",
+        user
+    )
+    .execute(pool)
+    .await
+    .map_err(MonitorError::DatabaseError)?;
+
+    if let Some(uuid) = uuid {
+        remover_uuid_v2ray(uuid).await?;
+    }
+
+    Ok(())
+}
+
+async fn update_user_online_status(
+    pool: &SqlitePool,
+    online_users: &mut Vec<OnlineUser>,
+    user: &str,
+    limite: i32,
+    count: i32
+) -> Result<(), MonitorError> {
+    let now = Local::now().naive_local().format("%Y-%m-%d %H:%M:%S").to_string();
+    let limite_count = format!("{}/{}", limite, count);
+    sqlx::query!(
+        "INSERT INTO online (login, limite, online_inicio, online_fim, online) VALUES (?, ?, ?, NULL, 'on')
+        ON CONFLICT(login) DO UPDATE SET limite = ?, online_inicio = ?, online = 'on'",
+        user,
+        limite_count,
+        now,
+        limite_count,
+        now
+    )
+    .execute(pool)
+    .await
+    .map_err(MonitorError::DatabaseError)?;
+
+    if let Some(online_inicio) = get_online_inicio(pool, user).await? {
+        let duration = Local::now().naive_local().signed_duration_since(online_inicio);
+        let hours = duration.num_hours();
+        let minutes = duration.num_minutes() % 60;
+        let seconds = duration.num_seconds() % 60;
+        let tempo_online = format!("usuário online há {} horas {} minutos e {} segundos", hours, minutes, seconds);
+
+        online_users.push(OnlineUser {
+            login: user.to_string(),
+            limite: limite_count,
+            tempo_online,
+        });
+    }
+
+    Ok(())
+}
+
+async fn mark_users_offline(pool: &SqlitePool, user_list: &[&str]) -> Result<(), MonitorError> {
+    let now = Local::now().naive_local().format("%Y-%m-%d %H:%M:%S").to_string();
+    let user_list_string = user_list.join(",");
+    sqlx::query!(
+        "UPDATE online SET online = 'off', online_fim = ? WHERE online = 'on' AND login NOT IN (?)",
+        now,
+        user_list_string
+    )
+    .execute(pool)
+    .await
+    .map_err(MonitorError::DatabaseError)?;
+
+    Ok(())
 }
 
 async fn remover_uuid_v2ray(uuid: &str) -> Result<(), MonitorError> {
