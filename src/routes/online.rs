@@ -31,6 +31,12 @@ pub struct OnlineUser {
     pub tempo_online: String,
 }
 
+pub struct UserInfo {
+    pub limite: i32,
+    pub dias: i32,
+    pub uuid: Option<String>,
+}
+
 async fn get_online_inicio(pool: &SqlitePool, user: &str) -> Result<Option<NaiveDateTime>, MonitorError> {
     let online_inicio: Option<NaiveDateTime> = sqlx::query_scalar!(
         "SELECT online_inicio FROM online WHERE login = ?",
@@ -83,7 +89,7 @@ pub async fn monitor_users(pool: Pool<Sqlite>) -> Result<Vec<OnlineUser>, Monito
 }
 
 async fn fetch_user_info(pool: &SqlitePool, user: &str) -> Result<Option<UserInfo>, MonitorError> {
-    let user_info = sqlx::query!(
+    let record = sqlx::query!(
         "SELECT limite, dias, uuid FROM users WHERE login = ?",
         user
     )
@@ -91,7 +97,15 @@ async fn fetch_user_info(pool: &SqlitePool, user: &str) -> Result<Option<UserInf
     .await
     .map_err(MonitorError::DatabaseError)?;
 
-    Ok(user_info)
+    if let Some(r) = record {
+        Ok(Some(UserInfo {
+            limite: r.limite as i32,
+            dias: r.dias as i32,
+            uuid: r.uuid,
+        }))
+    } else {
+        Ok(None)
+    }
 }
 
 async fn process_user_info(
@@ -177,15 +191,15 @@ async fn update_user_online_status(
 
 async fn mark_users_offline(pool: &SqlitePool, user_list: &[&str]) -> Result<(), MonitorError> {
     let now = Local::now().naive_local().format("%Y-%m-%d %H:%M:%S").to_string();
-    let user_list_string = user_list.join(",");
-    sqlx::query!(
-        "UPDATE online SET online = 'off', online_fim = ? WHERE online = 'on' AND login NOT IN (?)",
-        now,
-        user_list_string
-    )
-    .execute(pool)
-    .await
-    .map_err(MonitorError::DatabaseError)?;
+    let user_list_string = user_list.join("','");
+    let query = format!(
+        "UPDATE online SET online = 'off', online_fim = '{}' WHERE online = 'on' AND login NOT IN ('{}')",
+        now, user_list_string
+    );
+    sqlx::query(&query)
+        .execute(pool)
+        .await
+        .map_err(MonitorError::DatabaseError)?;
 
     Ok(())
 }
