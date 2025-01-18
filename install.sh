@@ -25,6 +25,24 @@ progress_bar() {
     echo "] Completo!"
 }
 
+# Definir função run_with_spinner
+run_with_spinner() {
+    local command=$1
+    local message=$2
+
+    echo -n "$message"
+    $command &
+    pid=$!
+
+    while kill -0 $pid 2>/dev/null; do
+        echo -n "."
+        sleep 1
+    done
+
+    wait $pid
+    echo " Done!"
+}
+
 # Verifica se o Docker está instalado
 if ! command -v docker &>/dev/null; then
     run_with_spinner "sudo apt update >/dev/null 2>&1" "Atualizando o apt"
@@ -71,8 +89,8 @@ else
     exit 1
 fi
 
-
 DEPENDENCIES=("unzip" "wget")
+NEED_INSTALL=()
 
 # Verificar dependências
 for dep in "${DEPENDENCIES[@]}"; do
