@@ -7,11 +7,11 @@ use crate::utils::restart_v2ray::reiniciar_v2ray;
 use crate::utils::email::gerar_email_aleatorio;
 
 pub async fn process_user_data(user: User) -> Result<(), String> {
-    adicionar_usuario_sistema(&user.login, &user.senha, user.dias, user.limite)?;
+    adicionar_usuario_sistema(&user.login, &user.senha, user.dias.try_into().unwrap(), user.limite.try_into().unwrap())?;
 
     if std::path::Path::new("/etc/v2ray/config.json").exists() {
         if let Some(ref uuid) = user.uuid {
-            if adicionar_uuid_ao_v2ray(uuid, &user.login, user.dias)? {
+            if adicionar_uuid_ao_v2ray(uuid, &user.login, user.dias.try_into().unwrap())? {
                 reiniciar_v2ray().await;
             }
         }

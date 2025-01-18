@@ -5,7 +5,7 @@ use sqlx::FromRow;
 pub struct User {
     pub login: String,
     pub senha: String,
-    pub dias: u32,
-    pub limite: u32,
+    pub dias: i32,
+    pub limite: i32,
     pub uuid: Option<String>,
 }

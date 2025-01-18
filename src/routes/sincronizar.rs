@@ -1,5 +1,5 @@
 use crate::models::user::User;
-use sqlx::{Pool, Sqlite};
+use sqlx::{Pool, Postgres};
 use std::collections::HashMap;
 use tokio::sync::Mutex;
 use std::sync::Arc;
@@ -29,7 +29,7 @@ pub enum SyncError {
     ProcessarDadosUsuario,
 }
 
-pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: Vec<User>) -> Result<(), SyncError> {
+pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Postgres>, usuarios: Vec<User>) -> Result<(), SyncError> {
     let mut deve_reiniciar_v2ray = false;
 
     for user in usuarios {
@@ -48,8 +48,8 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
     Ok(())
 }
 
-pub async fn verificar_e_criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Result<(), SyncError> {
-    let existing_user = sqlx::query_scalar::<_, String>("SELECT login FROM users WHERE login = ?")
+pub async fn verificar_e_criar_usuario(db: Database, pool: &Pool<Postgres>, user: User) -> Result<(), SyncError> {
+    let existing_user = sqlx::query_scalar::<_, String>("SELECT login FROM users WHERE login = $1")
         .bind(&user.login)
         .fetch_optional(pool)
         .await
@@ -62,7 +62,7 @@ pub async fn verificar_e_criar_usuario(db: Database, pool: &Pool<Sqlite>, user: 
     criar_usuario(db, pool, user).await
 }
 
-pub async fn excluir_usuario_sistema(usuario: &str, uuid: &Option<String>, pool: &Pool<Sqlite>) -> Result<(), SyncError> {
+pub async fn excluir_usuario_sistema(usuario: &str, uuid: &Option<String>, pool: &Pool<Postgres>) -> Result<(), SyncError> {
     let output = Command::new("id")
         .arg(usuario)
         .output()
@@ -87,7 +87,7 @@ pub async fn excluir_usuario_sistema(usuario: &str, uuid: &Option<String>, pool:
         .status()
         .map_err(|_| SyncError::FalhaComando)?;
 
-    sqlx::query("DELETE FROM users WHERE login = ?")
+    sqlx::query("DELETE FROM users WHERE login = $1")
         .bind(usuario)
         .execute(pool)
         .await
@@ -96,11 +96,11 @@ pub async fn excluir_usuario_sistema(usuario: &str, uuid: &Option<String>, pool:
     Ok(())
 }
 
-pub async fn criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Result<(), SyncError> {
+pub async fn criar_usuario(db: Database, pool: &Pool<Postgres>, user: User) -> Result<(), SyncError> {
     let mut db = db.lock().await;
 
     sqlx::query(
-        "INSERT INTO users (login, senha, dias, limite, uuid) VALUES (?, ?, ?, ?, ?)"
+        "INSERT INTO users (login, senha, dias, limite, uuid) VALUES ($1, $2, $3, $4, $5)"
     )
     .bind(&user.login)
     .bind(&user.senha)
@@ -124,11 +124,11 @@ pub async fn process_user_data(user: User) -> Result<(), SyncError> {
     let sshlimiter = user.limite;
     let uuid = user.uuid;
 
-    adicionar_usuario_sistema(username, password, dias, sshlimiter);
+    adicionar_usuario_sistema(username, password, dias.try_into().unwrap(), sshlimiter.try_into().unwrap());
 
     if v2ray_instalado() {
         if let Some(ref uuid) = uuid {
-            adicionar_uuid_ao_v2ray(uuid, username, dias).await;
+            adicionar_uuid_ao_v2ray(uuid, username, dias.try_into().unwrap()).await;
         }
     }
 

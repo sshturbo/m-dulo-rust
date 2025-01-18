@@ -1,5 +1,5 @@
 use crate::models::user::User;
-use sqlx::{Pool, Sqlite};
+use sqlx::{Pool, Postgres};
 use std::collections::HashMap;
 use tokio::sync::Mutex;
 use std::sync::Arc;
@@ -20,10 +20,10 @@ pub enum CriarError {
     ProcessarDadosUsuario,
 }
 
-pub async fn criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Result<(), CriarError> {
+pub async fn criar_usuario(db: Database, pool: &Pool<Postgres>, user: User) -> Result<(), CriarError> { // Alterado para Postgres
     let mut db = db.lock().await;
 
-    let existing_user = sqlx::query_scalar::<_, String>("SELECT login FROM users WHERE login = ?")
+    let existing_user = sqlx::query_scalar::<_, String>("SELECT login FROM users WHERE login = $1") // Alterado para $1
         .bind(&user.login)
         .fetch_optional(pool)
         .await
@@ -34,7 +34,7 @@ pub async fn criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Res
     }
 
     sqlx::query(
-        "INSERT INTO users (login, senha, dias, limite, uuid) VALUES (?, ?, ?, ?, ?)"
+        "INSERT INTO users (login, senha, dias, limite, uuid) VALUES ($1, $2, $3, $4, $5)" // Alterado para $1, $2, etc.
     )
     .bind(&user.login)
     .bind(&user.senha)
