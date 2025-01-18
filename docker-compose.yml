@@ -1,17 +1,16 @@
 version: "3.8"
 
 services:
-  # Serviço PostgreSQL
   postgres:
     image: postgres:14.13
     container_name: postgres_db
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: cb8c87193f183f91a16e6eb697ca84ec  # Altere para uma senha segura
+      POSTGRES_PASSWORD: cb8c87193f183f91a16e6eb697ca84ec
     ports:
-      - "5432:5432"  # Porta padrão do PostgreSQL
+      - "5432:5432" 
     volumes:
-      - postgres_data:/var/lib/postgresql/data  # Persistência de dados
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - rede_geral
     restart: always
