@@ -24,7 +24,7 @@ pub async fn initialize_db() -> Result<Pool<Postgres>, sqlx::Error> {
     .await?;
 
     sqlx::query(
-        "CREATE TABLE online (
+        "CREATE TABLE IF NOT EXISTS online (
             id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id),
             login VARCHAR(255) NOT NULL UNIQUE,
