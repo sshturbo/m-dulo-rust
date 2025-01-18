@@ -25,6 +25,53 @@ progress_bar() {
     echo "] Completo!"
 }
 
+# Verifica se o Docker está instalado
+if ! command -v docker &>/dev/null; then
+    run_with_spinner "sudo apt update >/dev/null 2>&1" "Atualizando o apt"
+    run_with_spinner "sudo apt install -y docker.io >/dev/null 2>&1" "Instalando Docker"
+    run_with_spinner "sudo systemctl start docker >/dev/null 2>&1" "Iniciando Docker"
+    run_with_spinner "sudo systemctl enable docker >/dev/null 2>&1" "Habilitando inicialização automática do Docker"
+else
+    print_centered "Docker já está instalado."
+fi
+
+# Verifica se o Docker Compose está instalado
+if ! command -v docker-compose &>/dev/null; then
+    run_with_spinner "sudo apt install -y curl >/dev/null 2>&1" "Instalando curl (necessário para o Docker Compose)"
+    run_with_spinner "sudo curl -L 'https://github.com/docker/compose/releases/download/$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep -oP '(?<=\"tag_name\": \").*?(?=\")')/docker-compose-$(uname -s)-$(uname -m)' -o /usr/local/bin/docker-compose" "Baixando Docker Compose"
+    run_with_spinner "sudo chmod +x /usr/local/bin/docker-compose" "Aplicando permissões ao Docker Compose"
+else
+    print_centered "Docker Compose já está instalado."
+fi
+
+# Gera uma chave de autenticação para o Postgres
+AUTHENTICATION_API_KEY=$(openssl rand -hex 16)
+print_centered "Chave de autenticação gerada: $AUTHENTICATION_API_KEY"
+
+# Modifica o arquivo docker-compose.yml
+if [ -f "docker-compose.yml" ]; then
+    print_centered "Adicionando POSTGRES_PASSWORD no arquivo docker-compose.yml..."
+    sed -i "s|POSTGRES_PASSWORD:.*|POSTGRES_PASSWORD: $AUTHENTICATION_API_KEY|" docker-compose.yml || {
+        echo "Erro ao modificar o arquivo docker-compose.yml."
+        exit 1
+    }
+else
+    echo "Erro: Arquivo docker-compose.yml não encontrado."
+    exit 1
+fi
+
+# Inicia o serviço com docker-compose
+print_centered "Iniciando os serviços com docker-compose..."
+docker-compose up -d &>/dev/null
+
+if [ $? -eq 0 ]; then
+    print_centered "Serviços iniciados com sucesso!"
+else
+    echo "Erro ao iniciar os serviços."
+    exit 1
+fi
+
+
 DEPENDENCIES=("unzip" "wget")
 
 # Verificar dependências
