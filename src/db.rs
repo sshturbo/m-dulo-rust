@@ -26,10 +26,10 @@ pub async fn initialize_db() -> Result<Pool<Postgres>, sqlx::Error> {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS online (
             id SERIAL PRIMARY KEY,
-            user_id INTEGER NOT NULL REFERENCES users(id),
+            byid INTEGER NOT NULL REFERENCES users(id),
             login VARCHAR(255) NOT NULL UNIQUE,
             limite INTEGER NOT NULL,
-            online_inicio TIMESTAMP,
+            inicio_sessao TEXT NOT NULL,
             status VARCHAR(255) DEFAULT 'On'
         );"
     )

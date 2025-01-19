@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+
+>>>>>>> b11c9ae (feat: adicionar serviço de monitoramento de usuários online e otimizar rotas de edição e exclusão)
 #!/bin/bash
 
 # Verifica se o script está sendo executado como root
@@ -130,4 +134,8 @@ if [ -f "$SERVICE_FILE" ]; then
 else
     print_centered "Erro: Arquivo de serviço não encontrado."
     exit 1
+<<<<<<< HEAD
 fi
+=======
+fi
+>>>>>>> b11c9ae (feat: adicionar serviço de monitoramento de usuários online e otimizar rotas de edição e exclusão)

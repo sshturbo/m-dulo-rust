@@ -20,6 +20,8 @@ pub enum EditarError {
     AtualizarUsuarioBanco(String),
     #[error("Erro ao processar dados do usuário")]
     ProcessarDadosUsuario,
+    #[error("Novo login já existe no banco de dados!")]
+    NovoLoginExiste,
 }
 
 pub async fn editar_usuario(
@@ -37,6 +39,16 @@ pub async fn editar_usuario(
 
     if existing_user.is_none() {
         return Err(EditarError::UsuarioNaoEncontrado);
+    }
+
+    let new_user_check = sqlx::query_as::<_, User>("SELECT * FROM users WHERE login = $1")
+        .bind(&edit_req.login_novo)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| EditarError::VerificarUsuario(e.to_string()))?;
+
+    if new_user_check.is_some() {
+        return Err(EditarError::NovoLoginExiste);
     }
 
     let _ = Command::new("pkill")

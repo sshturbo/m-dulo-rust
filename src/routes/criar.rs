@@ -20,10 +20,10 @@ pub enum CriarError {
     ProcessarDadosUsuario,
 }
 
-pub async fn criar_usuario(db: Database, pool: &Pool<Postgres>, user: User) -> Result<(), CriarError> { // Alterado para Postgres
+pub async fn criar_usuario(db: Database, pool: &Pool<Postgres>, user: User) -> Result<(), CriarError> { 
     let mut db = db.lock().await;
 
-    let existing_user = sqlx::query_scalar::<_, String>("SELECT login FROM users WHERE login = $1") // Alterado para $1
+    let existing_user = sqlx::query_scalar::<_, String>("SELECT login FROM users WHERE login = $1")
         .bind(&user.login)
         .fetch_optional(pool)
         .await
@@ -34,7 +34,7 @@ pub async fn criar_usuario(db: Database, pool: &Pool<Postgres>, user: User) -> R
     }
 
     sqlx::query(
-        "INSERT INTO users (login, senha, dias, limite, uuid) VALUES ($1, $2, $3, $4, $5)" // Alterado para $1, $2, etc.
+        "INSERT INTO users (login, senha, dias, limite, uuid) VALUES ($1, $2, $3, $4, $5)" 
     )
     .bind(&user.login)
     .bind(&user.senha)

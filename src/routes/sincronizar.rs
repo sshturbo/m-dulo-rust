@@ -21,8 +21,6 @@ pub enum SyncError {
     ExcluirUsuarioBanco(String),
     #[error("Erro ao inserir usuário no banco de dados: {0}")]
     InserirUsuarioBanco(String),
-    #[error("Usuário não encontrado no sistema")]
-    UsuarioNaoEncontrado,
     #[error("Falha ao executar comando")]
     FalhaComando,
     #[error("Erro ao processar dados do usuário")]
@@ -32,6 +30,14 @@ pub enum SyncError {
 pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Postgres>, usuarios: Vec<User>) -> Result<(), SyncError> {
     let mut deve_reiniciar_v2ray = false;
 
+    // Excluir todos os usuários recebidos do banco de dados
+    for user in &usuarios {
+        if let Err(e) = excluir_usuario_sistema(&user.login, &user.uuid, pool).await {
+            eprintln!("Erro ao excluir usuário {}: {}", user.login, e);
+        }
+    }
+
+    // Recriar todos os usuários
     for user in usuarios {
         let result = verificar_e_criar_usuario(db.clone(), pool, user.clone()).await;
         if let Err(e) = result {
@@ -56,7 +62,9 @@ pub async fn verificar_e_criar_usuario(db: Database, pool: &Pool<Postgres>, user
         .map_err(|e| SyncError::VerificarUsuario(e.to_string()))?;
 
     if existing_user.is_some() {
-        excluir_usuario_sistema(&user.login, &user.uuid, pool).await?;
+        if let Err(e) = excluir_usuario_sistema(&user.login, &user.uuid, pool).await {
+            return Err(e);
+        }
     }
 
     criar_usuario(db, pool, user).await
@@ -69,24 +77,26 @@ pub async fn excluir_usuario_sistema(usuario: &str, uuid: &Option<String>, pool:
         .map_err(|_| SyncError::FalhaComando)?;
 
     if !output.status.success() {
-        return Err(SyncError::UsuarioNaoEncontrado);
-    }
-
-    if let Some(uuid) = uuid {
-        if v2ray_instalado() {
-            remover_uuid_v2ray(uuid).await;
+        // Não retornar erro se o usuário não for encontrado no sistema
+        eprintln!("Usuário {} não encontrado no sistema", usuario);
+    } else {
+        if let Some(uuid) = uuid {
+            if v2ray_instalado() {
+                remover_uuid_v2ray(uuid).await;
+            }
         }
+
+        let _ = Command::new("pkill")
+            .args(["-u", usuario])
+            .status();
+
+        let _ = Command::new("userdel")
+            .arg(usuario)
+            .status()
+            .map_err(|_| SyncError::FalhaComando)?;
     }
 
-    let _ = Command::new("pkill")
-        .args(["-u", usuario])
-        .status();
-
-    let _ = Command::new("userdel")
-        .arg(usuario)
-        .status()
-        .map_err(|_| SyncError::FalhaComando)?;
-
+    // Excluir o usuário do banco de dados
     sqlx::query("DELETE FROM users WHERE login = $1")
         .bind(usuario)
         .execute(pool)

@@ -17,9 +17,12 @@ use crate::models::delete_global::ExcluirGlobalRequest;
 use crate::models::edit::EditRequest;
 use std::env;
 use thiserror::Error;
+use crate::routes::online_monitor::monitor_users;
 use axum::http::StatusCode;
 use crate::routes::criar::{Database, CriarError};
 use crate::routes::criar::criar_usuario;
+use log::info;
+use std::time::Duration;
 
 #[derive(Error, Debug)]
 pub enum WsHandlerError {
@@ -57,7 +60,7 @@ impl From<StatusCode> for WsHandlerError {
     }
 }
 
-impl IntoResponse for CriarError { 
+impl IntoResponse for CriarError {
     fn into_response(self) -> axum::response::Response {
         (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()).into_response()
     }
@@ -69,6 +72,13 @@ pub async fn websocket_handler(
 ) -> impl IntoResponse {
     let db: Database = Arc::new(Mutex::new(HashMap::new()));
     ws.on_upgrade(move |socket| handle_socket(socket, db, pool.0))
+}
+
+pub async fn websocket_online_handler(
+    ws: WebSocketUpgrade,
+    pool: axum::extract::State<Pool<Postgres>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_online_socket(socket, pool.0))
 }
 
 async fn handle_socket(
@@ -85,6 +95,38 @@ async fn handle_socket(
             let _ = socket.send(Message::Text(response)).await;
         }
     }
+}
+
+async fn handle_online_socket(
+    mut socket: WebSocket,
+    pool: Pool<Postgres>,
+) {
+    info!("Cliente conectado ao WebSocket /online");
+
+    loop {
+        let online_users = match monitor_users(pool.clone()).await {
+            Ok(users) => {
+                if users.is_empty() {
+                    serde_json::json!({"message": "Nenhum usuário online no momento."}).to_string()
+                } else {
+                    serde_json::to_string(&users).unwrap()
+                }
+            },
+            Err(e) => serde_json::json!({"error": e.to_string()}).to_string(),
+        };
+
+        if let Err(e) = socket.send(Message::Text(online_users.clone())).await {
+            if e.to_string().contains("Broken pipe") {
+                info!("Cliente desconectado do WebSocket /online");
+                break;
+            }
+            info!("Erro ao enviar mensagem: {}", e);
+            break;
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+
+    info!("Cliente desconectado do WebSocket /online");
 }
 
 async fn handle_message(text: &str, db: Database, pool: &Pool<Postgres>) -> Result<String, WsHandlerError> {

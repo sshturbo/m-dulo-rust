@@ -11,8 +11,6 @@ use thiserror::Error;
 pub enum ExcluirError {
     #[error("Falha ao executar comando")]
     FalhaComando,
-    #[error("Usuário não encontrado no sistema")]
-    UsuarioNaoEncontrado,
     #[error("Erro ao excluir usuário do banco: {0}")]
     ExcluirUsuarioBanco(String),
 }
@@ -29,8 +27,16 @@ pub async fn excluir_usuario(
         .map_err(|_| ExcluirError::FalhaComando)?;
 
     if !output.status.success() {
-        error!("Usuário {} não encontrado no sistema", usuario);
-        return Err(ExcluirError::UsuarioNaoEncontrado);
+        error!("Usuário {} não encontrado no sistema, excluindo do banco de dados", usuario);
+
+        sqlx::query("DELETE FROM users WHERE login = $1")
+            .bind(&usuario)
+            .execute(&pool)
+            .await
+            .map_err(|e| ExcluirError::ExcluirUsuarioBanco(e.to_string()))?;
+
+        info!("Usuário {} excluído com sucesso", usuario);
+        return Ok("Usuário excluído com sucesso".to_string());
     }
 
     if let Some(uuid) = uuid {
