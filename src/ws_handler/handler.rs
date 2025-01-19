@@ -23,6 +23,7 @@ use crate::routes::criar::{Database, CriarError};
 use crate::routes::criar::criar_usuario;
 use log::info;
 use std::time::Duration;
+use serde_json::json;
 
 #[derive(Error, Debug)]
 pub enum WsHandlerError {
@@ -105,17 +106,11 @@ async fn handle_online_socket(
 
     loop {
         let online_users = match monitor_users(pool.clone()).await {
-            Ok(users) => {
-                if users.is_empty() {
-                    serde_json::json!({"message": "Nenhum usuário online no momento."}).to_string()
-                } else {
-                    serde_json::to_string(&users).unwrap()
-                }
-            },
-            Err(e) => serde_json::json!({"error": e.to_string()}).to_string(),
+            Ok(users) => users,
+            Err(e) => json!({"error": e.to_string()}),
         };
 
-        if let Err(e) = socket.send(Message::Text(online_users.clone())).await {
+        if let Err(e) = socket.send(Message::Text(online_users.to_string())).await {
             if e.to_string().contains("Broken pipe") {
                 info!("Cliente desconectado do WebSocket /online");
                 break;

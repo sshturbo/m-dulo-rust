@@ -29,6 +29,7 @@ pub async fn initialize_db() -> Result<Pool<Postgres>, sqlx::Error> {
             byid INTEGER NOT NULL REFERENCES users(id),
             login VARCHAR(255) NOT NULL UNIQUE,
             limite INTEGER NOT NULL,
+            usuarios_online INTEGER DEFAULT 0,
             inicio_sessao TEXT NOT NULL,
             status VARCHAR(255) DEFAULT 'On'
         );"

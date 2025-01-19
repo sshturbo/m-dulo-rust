@@ -3,9 +3,9 @@ use chrono::{NaiveDateTime, Local};
 use serde_json::json;
 use log::error;
 
-pub async fn monitor_users(pool: Pool<Postgres>) -> Result<String, Error> {
+pub async fn monitor_users(pool: Pool<Postgres>) -> Result<serde_json::Value, Error> {
     let rows = match sqlx::query!(
-        "SELECT login, limite, inicio_sessao FROM online"
+        "SELECT login, limite, inicio_sessao, usuarios_online FROM online"
     )
     .fetch_all(&pool)
     .await
@@ -18,7 +18,7 @@ pub async fn monitor_users(pool: Pool<Postgres>) -> Result<String, Error> {
     };
 
     if rows.is_empty() {
-        return Ok(serde_json::json!({"message": "Nenhum usuário online no momento."}).to_string());
+        return Ok(json!({"message": "Nenhum usuário online no momento"}));
     }
 
     let mut users = Vec::new();
@@ -46,15 +46,10 @@ pub async fn monitor_users(pool: Pool<Postgres>) -> Result<String, Error> {
         users.push(json!({
             "login": row.login,
             "limite": row.limite,
+            "online": row.usuarios_online,
             "tempo_online": tempo_online
         }));
     }
 
-    match serde_json::to_string(&users) {
-        Ok(json_str) => Ok(json_str),
-        Err(e) => {
-            error!("Erro ao converter usuários para JSON: {}", e);
-            Err(sqlx::Error::RowNotFound) 
-        }
-    }
+    Ok(json!(users))
 }
