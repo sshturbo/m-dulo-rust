@@ -1,8 +1,20 @@
-<<<<<<< HEAD
-=======
-
->>>>>>> b11c9ae (feat: adicionar serviço de monitoramento de usuários online e otimizar rotas de edição e exclusão)
 #!/bin/bash
+
+# Variáveis
+APP_DIR="/opt/myapp"
+DEPENDENCIES=("unzip" "wget")
+VERSION="1.0.1"
+AUTHENTICATION_API_KEY=$(openssl rand -hex 16)
+FILE_URL="https://github.com/sshturbo/m-dulo-rust/releases/download/$VERSION"
+ARCH=$(uname -m)
+case $ARCH in
+x86_64) FILE_NAME="m-dulo-rust-x86_64-unknown-linux-musl.zip" ;;
+aarch64) FILE_NAME="m-dulo-rust-aarch64-unknown-linux-musl.zip" ;;
+*)
+    echo "Arquitetura $ARCH não suportada."
+    exit 1
+    ;;
+esac
 
 # Verifica se o script está sendo executado como root
 if [[ $EUID -ne 0 ]]; then
@@ -71,37 +83,32 @@ else
 fi
 
 # Gera uma chave de autenticação
-AUTHENTICATION_API_KEY=$(openssl rand -hex 16)
 print_centered "Chave de autenticação gerada: $AUTHENTICATION_API_KEY"
 
 # Verificar e criar diretório de aplicação
-APP_DIR="/opt/myapp"
 mkdir -p $APP_DIR
 
 # Instalar dependências
-DEPENDENCIES=("unzip" "wget")
 for dep in "${DEPENDENCIES[@]}"; do
     install_if_missing $dep
 done
 
-# Detectar arquitetura e baixar arquivo correspondente
-ARCH=$(uname -m)
-case $ARCH in
-    x86_64) FILE_NAME="m-dulo-rust-x86_64-unknown-linux-musl.zip" ;;
-    aarch64) FILE_NAME="m-dulo-rust-aarch64-unknown-linux-musl.zip" ;;
-    *) echo "Arquitetura $ARCH não suportada."; exit 1 ;;
-esac
-
-FILE_URL="https://github.com/sshturbo/m-dulo-rust/releases/download/1.0.1/$FILE_NAME"
-
 # Baixar e configurar o módulo
 print_centered "Baixando $FILE_NAME..."
-wget --timeout=30 -O "$APP_DIR/$FILE_NAME" "$FILE_URL" &>/dev/null || {
-    echo "Erro ao baixar o arquivo."; exit 1; }
+wget --timeout=30 -O "$APP_DIR/$FILE_NAME" "$FILE_URL/$FILE_NAME" &>/dev/null || {
+    echo "Erro ao baixar o arquivo."
+    exit 1
+}
 
 print_centered "Extraindo arquivos..."
 unzip "$APP_DIR/$FILE_NAME" -d "$APP_DIR" &>/dev/null && rm "$APP_DIR/$FILE_NAME"
 progress_bar 5
+
+# Copiar .env.example para .env
+cp "$APP_DIR/.env.example" "$APP_DIR/.env"
+
+# Atualizar URL do banco de dados no arquivo .env
+sed -i "s|DATABASE_URL=.*|DATABASE_URL=\"postgres://postgres:$AUTHENTICATION_API_KEY@localhost:5432/postgres\"|" "$APP_DIR/.env"
 
 # Atualizar permissões
 chmod -R 775 $APP_DIR
@@ -118,9 +125,12 @@ fi
 
 # Iniciar serviços com docker-compose
 print_centered "Iniciando os serviços com docker-compose..."
-docker-compose -f $DOCKER_COMPOSE_FILE up -d &>/dev/null && \
-    print_centered "Serviços iniciados com sucesso!" || \
-    { echo "Erro ao iniciar os serviços."; exit 1; }
+docker-compose -f $DOCKER_COMPOSE_FILE up -d &>/dev/null &&
+    print_centered "Serviços iniciados com sucesso!" ||
+    {
+        echo "Erro ao iniciar os serviços."
+        exit 1
+    }
 
 # Configurar serviço systemd
 SERVICE_FILE="$APP_DIR/m-dulo.service"
@@ -134,8 +144,7 @@ if [ -f "$SERVICE_FILE" ]; then
 else
     print_centered "Erro: Arquivo de serviço não encontrado."
     exit 1
-<<<<<<< HEAD
 fi
-=======
-fi
->>>>>>> b11c9ae (feat: adicionar serviço de monitoramento de usuários online e otimizar rotas de edição e exclusão)
+
+progress_bar 10
+print_centered "Modulos instalado e configurado com sucesso!"
