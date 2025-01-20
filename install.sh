@@ -4,7 +4,7 @@
 # Configurações e Variáveis Globais
 # ===============================
 APP_DIR="/opt/myapp"
-DEPENDENCIES=("unzip" "wget")
+DEPENDENCIES=("unzip" "iptables")
 VERSION="1.0.2"
 AUTHENTICATION_API_KEY=$(openssl rand -hex 16)
 FILE_URL="https://github.com/sshturbo/m-dulo-rust/releases/download/$VERSION"
