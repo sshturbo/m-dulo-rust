@@ -6,7 +6,7 @@
 - Cargo (gerenciador de pacotes do Rust)
 
 ## Instalação rapida ja com o binario gerado.
-    ```sh
+    ```
     sudo wget -qO- https://raw.githubusercontent.com/sshturbo/m-dulo-rust/refs/heads/master/install.sh | sudo bash
     ```
 
