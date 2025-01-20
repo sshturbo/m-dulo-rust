@@ -3,13 +3,13 @@
 # Variáveis
 APP_DIR="/opt/myapp"
 DEPENDENCIES=("unzip" "wget")
-VERSION="1.0.1"
+VERSION="1.0.2"
 AUTHENTICATION_API_KEY=$(openssl rand -hex 16)
 FILE_URL="https://github.com/sshturbo/m-dulo-rust/releases/download/$VERSION"
 ARCH=$(uname -m)
 case $ARCH in
-x86_64) FILE_NAME="m-dulo-rust-x86_64-unknown-linux-musl.zip" ;;
-aarch64) FILE_NAME="m-dulo-rust-aarch64-unknown-linux-musl.zip" ;;
+x86_64) FILE_NAME="m-dulo-x86_64-unknown-linux-musl.zip" ;;
+aarch64) FILE_NAME="m-dulo-aarch64-unknown-linux-musl.zip" ;;
 *)
     echo "Arquitetura $ARCH não suportada."
     exit 1
