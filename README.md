@@ -4,6 +4,9 @@
 
 - Rust (versão mais recente)
 - Cargo (gerenciador de pacotes do Rust)
+- Postgres
+- Docker
+- Docker Compose
 
 ## Instalação rapida ja com o binario gerado.
     
