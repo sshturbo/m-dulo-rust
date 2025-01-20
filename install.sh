@@ -104,8 +104,8 @@ print_centered "Extraindo arquivos..."
 unzip "$APP_DIR/$FILE_NAME" -d "$APP_DIR" &>/dev/null && rm "$APP_DIR/$FILE_NAME"
 progress_bar 5
 
-# Copiar .env.example para .env
-cp "$APP_DIR/.env.example" "$APP_DIR/.env"
+# Copiar .env.exemple para .env
+cp "$APP_DIR/.env.exemple" "$APP_DIR/.env"
 
 # Atualizar URL do banco de dados no arquivo .env
 sed -i "s|DATABASE_URL=.*|DATABASE_URL=\"postgres://postgres:$AUTHENTICATION_API_KEY@localhost:5432/postgres\"|" "$APP_DIR/.env"
