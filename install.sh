@@ -68,7 +68,7 @@ if ! command -v docker &>/dev/null; then
     run_with_spinner "sudo apt update >/dev/null 2>&1" "Atualizando apt"
     run_with_spinner "sudo apt install -y docker.io >/dev/null 2>&1" "Instalando Docker"
     run_with_spinner "sudo systemctl start docker >/dev/null 2>&1" "Iniciando Docker"
-    run_with_spinner "sudo systemctl enable docker >/dev/null 2>&1" "Habilitando inicialização automática do Docker"
+    run_with_spinner "sudo systemctl enable docker >/dev/null 2>&dev/null" "Habilitando inicialização automática do Docker"
 else
     print_centered "Docker já está instalado."
 fi
@@ -85,11 +85,12 @@ fi
 # Gera uma chave de autenticação
 print_centered "Chave de autenticação gerada: $AUTHENTICATION_API_KEY"
 
-# Verificar e excluir contêiner Docker existente
+# Verificar e excluir contêiner Docker existente e volume
 if [ "$(docker ps -aq -f name=postgres_db)" ]; then
     print_centered "Contêiner postgres_db já existe. Excluindo..."
     docker stop postgres_db &>/dev/null
     docker rm postgres_db &>/dev/null
+    docker volume rm postgres_data &>/dev/null
 fi
 
 # Configuração do diretório /opt/myapp/
