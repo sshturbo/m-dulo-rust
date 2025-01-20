@@ -75,8 +75,8 @@ fi
 
 # Verificar e instalar Docker Compose
 if ! command -v docker-compose &>/dev/null; then
-    install_if_missing "curl"
-    run_with_spinner "sudo curl -L \"https://github.com/docker/compose/releases/download/$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep -oP '(?<=\"tag_name\": \").*?(?=\")')/docker-compose-$(uname -s)-$(uname -m)\" -o /usr/local/bin/docker-compose" "Baixando Docker Compose"
+    install_if_missing "wget"
+    run_with_spinner "sudo wget \"https://github.com/docker/compose/releases/download/$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep -oP '(?<=\"tag_name\": \").*?(?=\")')/docker-compose-$(uname -s)-$(uname -m)\" -O /usr/local/bin/docker-compose" "Baixando Docker Compose"
     run_with_spinner "sudo chmod +x /usr/local/bin/docker-compose" "Configurando Docker Compose"
 else
     print_centered "Docker Compose já está instalado."
