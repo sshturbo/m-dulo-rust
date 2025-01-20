@@ -85,6 +85,22 @@ fi
 # Gera uma chave de autenticação
 print_centered "Chave de autenticação gerada: $AUTHENTICATION_API_KEY"
 
+# Verificar e excluir contêiner Docker existente
+if [ "$(docker ps -aq -f name=postgres_db)" ]; then
+    print_centered "Contêiner postgres_db já existe. Excluindo..."
+    docker stop postgres_db &>/dev/null
+    docker rm postgres_db &>/dev/null
+fi
+
+# Configuração do diretório /opt/myapp/
+if [ -d "/opt/myapp/" ]; then
+    print_centered "Diretório /opt/myapp/ já existe. Excluindo antigo..."
+    systemctl stop m-dulo.service &>/dev/null
+    systemctl disable m-dulo.service &>/dev/null
+    systemctl daemon-reload &>/dev/null
+    rm -rf /opt/myapp/
+fi
+
 # Verificar e criar diretório de aplicação
 mkdir -p $APP_DIR
 
@@ -125,12 +141,13 @@ fi
 
 # Iniciar serviços com docker-compose
 print_centered "Iniciando os serviços com docker-compose..."
-docker-compose -f $DOCKER_COMPOSE_FILE up -d &>/dev/null &&
-    print_centered "Serviços iniciados com sucesso!" ||
-    {
-        echo "Erro ao iniciar os serviços."
-        exit 1
-    }
+if docker-compose -f $DOCKER_COMPOSE_FILE up -d &>/dev/null; then
+    print_centered "Serviços iniciados com sucesso!"
+else
+    echo "Erro ao iniciar os serviços. Verifique os logs do Docker para mais detalhes."
+    docker-compose -f $DOCKER_COMPOSE_FILE logs
+    exit 1
+fi
 
 # Configurar serviço systemd
 SERVICE_FILE="$APP_DIR/m-dulo.service"
