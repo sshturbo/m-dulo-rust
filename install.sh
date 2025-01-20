@@ -39,11 +39,11 @@ progress_bar() {
 
 # Executar comandos com spinner
 run_with_spinner() {
-    local command=$1
-    local message=$2
+    local command="$1"
+    local message="$2"
 
     echo -n "$message"
-    $command &
+    $command &>/dev/null &
     pid=$!
     while kill -0 $pid 2>/dev/null; do
         echo -n "."
@@ -57,7 +57,7 @@ run_with_spinner() {
 install_if_missing() {
     local package=$1
     if ! command -v $package &>/dev/null; then
-        run_with_spinner "sudo apt install -y $package >/dev/null 2>&1" "Instalando $package"
+        run_with_spinner "sudo apt install -y $package" "Instalando $package"
     else
         print_centered "$package já está instalado."
     fi
@@ -65,10 +65,14 @@ install_if_missing() {
 
 # Verificar e instalar Docker
 if ! command -v docker &>/dev/null; then
-    run_with_spinner "sudo apt update >/dev/null 2>&1" "Atualizando apt"
-    run_with_spinner "sudo apt install -y docker.io >/dev/null 2>&1" "Instalando Docker"
-    run_with_spinner "sudo systemctl start docker >/dev/null 2>&1" "Iniciando Docker"
-    run_with_spinner "sudo systemctl enable docker >/dev/null 2>&dev/null" "Habilitando inicialização automática do Docker"
+    run_with_spinner "sudo apt update" "Atualizando apt"
+    run_with_spinner "sudo apt install -y docker.io" "Instalando Docker"
+    if ! command -v docker &>/dev/null; then
+        echo "Erro: Docker não foi instalado corretamente."
+        exit 1
+    fi
+    run_with_spinner "sudo systemctl start docker" "Iniciando Docker"
+    run_with_spinner "sudo systemctl enable docker" "Habilitando inicialização automática do Docker"
 else
     print_centered "Docker já está instalado."
 fi
@@ -165,4 +169,4 @@ else
 fi
 
 progress_bar 10
-print_centered "Modulos instalado e configurado com sucesso!"
+print_centered "Módulo instalado e configurado com sucesso!"
