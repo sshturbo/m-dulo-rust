@@ -1,62 +1,50 @@
 #!/bin/bash
 
-# ===============================
-# Configurações e Variáveis Globais
-# ===============================
+# Variáveis
 APP_DIR="/opt/myapp"
-DEPENDENCIES=("unzip" "iptables")
+DEPENDENCIES=("unzip" "wget")
 VERSION="1.0.2"
 AUTHENTICATION_API_KEY=$(openssl rand -hex 16)
 FILE_URL="https://github.com/sshturbo/m-dulo-rust/releases/download/$VERSION"
-DOCKER_VERSION="27.5.0"
-DOCKER_BASE_URL="https://download.docker.com/linux/static/stable"
-DOCKER_COMPOSE_RELEASE_URL="https://github.com/docker/compose/releases/latest"
 ARCH=$(uname -m)
-DOCKER_TGZ="docker-$DOCKER_VERSION.tgz"
-SERVICE_FILE_NAME="m-dulo.service"
-DOCKER_COMPOSE_BIN="/usr/local/bin/docker-compose"
-DOCKER_COMPOSE_FILE="$APP_DIR/docker-compose.yml"
-
-# Determinar arquitetura e nome do arquivo para download
 case $ARCH in
-x86_64)
-    FILE_NAME="m-dulo-x86_64-unknown-linux-musl.zip"
-    DOCKER_ARCH="x86_64"
-    ;;
-aarch64)
-    FILE_NAME="m-dulo-aarch64-unknown-linux-musl.zip"
-    DOCKER_ARCH="aarch64"
-    ;;
+x86_64) FILE_NAME="m-dulo-x86_64-unknown-linux-musl.zip" ;;
+aarch64) FILE_NAME="m-dulo-aarch64-unknown-linux-musl.zip" ;;
 *)
     echo "Arquitetura $ARCH não suportada."
     exit 1
     ;;
 esac
 
-DOCKER_URL="$DOCKER_BASE_URL/$DOCKER_ARCH/$DOCKER_TGZ"
+# Verifica se o script está sendo executado como root
+if [[ $EUID -ne 0 ]]; then
+    echo "Este script deve ser executado como root"
+    exit 1
+fi
 
-# ===============================
-# Funções Utilitárias
-# ===============================
+# Função para centralizar texto
 print_centered() {
     printf "%*s\n" $(((${#1} + $(tput cols)) / 2)) "$1"
 }
 
+# Função para exibir barra de progresso
 progress_bar() {
     local total_steps=$1
     for ((i = 0; i < total_steps; i++)); do
         echo -n "#"
         sleep 0.1
     done
-    echo " Completo!"
+    echo "] Completo!"
 }
 
+# Executar comandos com spinner
 run_with_spinner() {
     local command="$1"
     local message="$2"
+
     echo -n "$message"
     $command &>/dev/null &
-    local pid=$!
+    pid=$!
     while kill -0 $pid 2>/dev/null; do
         echo -n "."
         sleep 1
@@ -65,6 +53,7 @@ run_with_spinner() {
     echo " Feito!"
 }
 
+# Instalação de pacotes com verificação
 install_if_missing() {
     local package=$1
     if ! command -v $package &>/dev/null; then
@@ -74,71 +63,56 @@ install_if_missing() {
     fi
 }
 
-# ===============================
-# Validações Iniciais
-# ===============================
-if [[ $EUID -ne 0 ]]; then
-    echo "Este script deve ser executado como root."
-    exit 1
-fi
-
-# ===============================
-# Instalação do Docker
-# ===============================
+# Verificar e instalar Docker
 if ! command -v docker &>/dev/null; then
-    print_centered "Baixando Docker binário para arquitetura $ARCH..."
-    wget -q -O "/tmp/$DOCKER_TGZ" "$DOCKER_URL" || {
-        echo "Erro ao baixar o Docker binário."
+    run_with_spinner "sudo apt update" "Atualizando apt"
+    run_with_spinner "sudo apt install -y docker.io" "Instalando Docker"
+    if ! command -v docker &>/dev/null; then
+        echo "Erro: Docker não foi instalado corretamente."
         exit 1
-    }
-
-    print_centered "Extraindo arquivos do Docker..."
-    tar xzvf "/tmp/$DOCKER_TGZ" -C /tmp &>/dev/null
-
-    print_centered "Movendo binários para /usr/bin/..."
-    cp /tmp/docker/* /usr/bin/
-    chmod +x /usr/bin/docker*
-
-    print_centered "Iniciando o daemon do Docker..."
-    dockerd &
-    print_centered "Docker instalado com sucesso!"
+    fi
+    run_with_spinner "sudo systemctl start docker" "Iniciando Docker"
+    run_with_spinner "sudo systemctl enable docker" "Habilitando inicialização automática do Docker"
 else
     print_centered "Docker já está instalado."
 fi
 
-# Limpeza temporária
-rm -rf /tmp/docker /tmp/$DOCKER_TGZ
-
-# ===============================
-# Instalação do Docker Compose
-# ===============================
+# Verificar e instalar Docker Compose
 if ! command -v docker-compose &>/dev/null; then
     install_if_missing "wget"
-    COMPOSE_VERSION=$(curl -s "$DOCKER_COMPOSE_RELEASE_URL" | grep -oP '(?<="tag_name": ").*?(?=")')
-    COMPOSE_URL="https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)"
-
-    run_with_spinner "sudo wget -q -O $DOCKER_COMPOSE_BIN $COMPOSE_URL" "Baixando Docker Compose"
-    run_with_spinner "sudo chmod +x $DOCKER_COMPOSE_BIN" "Configurando Docker Compose"
+    run_with_spinner "sudo wget \"https://github.com/docker/compose/releases/download/$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep -oP '(?<=\"tag_name\": \").*?(?=\")')/docker-compose-$(uname -s)-$(uname -m)\" -O /usr/local/bin/docker-compose" "Baixando Docker Compose"
+    run_with_spinner "sudo chmod +x /usr/local/bin/docker-compose" "Configurando Docker Compose"
 else
     print_centered "Docker Compose já está instalado."
 fi
 
-# ===============================
-# Configuração da Aplicação
-# ===============================
+# Gera uma chave de autenticação
+print_centered "Chave de autenticação gerada: $AUTHENTICATION_API_KEY"
+
+# Verificar e excluir contêiner Docker existente e volume
+if [ "$(docker ps -aq -f name=postgres_db)" ]; then
+    print_centered "Contêiner postgres_db já existe. Excluindo..."
+    docker stop postgres_db &>/dev/null
+    docker rm postgres_db &>/dev/null
+    docker volume rm postgres_data &>/dev/null
+fi
+
+# Configuração do diretório /opt/myapp/
+if [ -d "/opt/myapp/" ]; then
+    print_centered "Diretório /opt/myapp/ já existe. Excluindo antigo..."
+    systemctl stop m-dulo.service &>/dev/null
+    systemctl disable m-dulo.service &>/dev/null
+    systemctl daemon-reload &>/dev/null
+    rm -rf /opt/myapp/
+fi
+
+# Verificar e criar diretório de aplicação
+mkdir -p $APP_DIR
+
 # Instalar dependências
 for dep in "${DEPENDENCIES[@]}"; do
     install_if_missing $dep
 done
-
-# Configurar diretório da aplicação
-if [ -d "$APP_DIR" ]; then
-    print_centered "Diretório $APP_DIR já existe. Excluindo antigo..."
-    systemctl stop $SERVICE_FILE_NAME &>/dev/null
-    systemctl disable $SERVICE_FILE_NAME &>/dev/null
-    rm -rf $APP_DIR
-fi
-mkdir -p $APP_DIR
 
 # Baixar e configurar o módulo
 print_centered "Baixando $FILE_NAME..."
@@ -151,12 +125,17 @@ print_centered "Extraindo arquivos..."
 unzip "$APP_DIR/$FILE_NAME" -d "$APP_DIR" &>/dev/null && rm "$APP_DIR/$FILE_NAME"
 progress_bar 5
 
-# Configurar arquivo .env
+# Copiar .env.exemple para .env
 cp "$APP_DIR/.env.exemple" "$APP_DIR/.env"
+
+# Atualizar URL do banco de dados no arquivo .env
 sed -i "s|DATABASE_URL=.*|DATABASE_URL=\"postgres://postgres:$AUTHENTICATION_API_KEY@localhost:5432/postgres\"|" "$APP_DIR/.env"
+
+# Atualizar permissões
 chmod -R 775 $APP_DIR
 
 # Configurar docker-compose.yml
+DOCKER_COMPOSE_FILE="$APP_DIR/docker-compose.yml"
 if [ -f "$DOCKER_COMPOSE_FILE" ]; then
     sed -i "s/POSTGRES_PASSWORD:.*/POSTGRES_PASSWORD: $AUTHENTICATION_API_KEY/" $DOCKER_COMPOSE_FILE
     print_centered "POSTGRES_PASSWORD atualizado em $DOCKER_COMPOSE_FILE"
@@ -176,13 +155,14 @@ else
 fi
 
 # Configurar serviço systemd
-if [ -f "$APP_DIR/$SERVICE_FILE_NAME" ]; then
-    cp "$APP_DIR/$SERVICE_FILE_NAME" /etc/systemd/system/
-    chmod 644 /etc/systemd/system/$SERVICE_FILE_NAME
+SERVICE_FILE="$APP_DIR/m-dulo.service"
+if [ -f "$SERVICE_FILE" ]; then
+    cp "$SERVICE_FILE" /etc/systemd/system/
+    chmod 644 /etc/systemd/system/m-dulo.service
     systemctl daemon-reload
-    systemctl enable $SERVICE_FILE_NAME
-    systemctl start $SERVICE_FILE_NAME
-    print_centered "Serviço $SERVICE_FILE_NAME configurado e iniciado com sucesso!"
+    systemctl enable m-dulo.service
+    systemctl start m-dulo.service
+    print_centered "Serviço m-dulo configurado e iniciado com sucesso!"
 else
     print_centered "Erro: Arquivo de serviço não encontrado."
     exit 1
