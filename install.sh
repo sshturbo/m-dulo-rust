@@ -1,12 +1,6 @@
 #!/bin/bash
 
 # ===============================
-# Atualização do Sistema
-# ===============================
-print_centered "ATUALIZANDO O SISTEMA..."
-run_with_spinner "sudo apt update && sudo apt upgrade -y" "ATUALIZANDO O SISTEMA"
-
-# ===============================
 # Configurações e Variáveis Globais
 # ===============================
 APP_DIR="/opt/myapp"
@@ -93,6 +87,12 @@ if [[ $EUID -ne 0 ]]; then
     echo "Este script deve ser executado como root."
     exit 1
 fi
+
+# ===============================
+# Atualização do Sistema
+# ===============================
+print_centered "ATUALIZANDO O SISTEMA..."
+run_with_spinner "sudo apt update && sudo apt upgrade -y" "ATUALIZANDO O SISTEMA"
 
 # ===============================
 # Instalação do Docker
