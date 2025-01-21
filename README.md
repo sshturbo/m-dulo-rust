@@ -29,11 +29,6 @@
     echo "API_TOKEN=$(openssl rand -hex 16)" >> .env
     ```
 
-4. Suba os containers do Docker Compose: 
-   ```sh 
-   docker-compose up -d
-   ```
-
 4. Compile o projeto:
     ```sh
     cargo build
