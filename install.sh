@@ -139,7 +139,7 @@ print_centered "BAIXANDO $FILE_NAME..."
 run_with_spinner "wget --timeout=30 -O $APP_DIR/$FILE_NAME $FILE_URL/$FILE_NAME" "BAIXANDO ARQUIVO"
 
 print_centered "EXTRAINDO ARQUIVOS..."
-run_with_spinner "unzip $APP_DIR/$FILE_NAME -d $APP_DIR && rm $APP_DIR/$FILE_NAME" "EXTRAINDO ARQUIVOS"
+run_with_spinner "unzip -o $APP_DIR/$FILE_NAME -d $APP_DIR && rm $APP_DIR/$FILE_NAME" "EXTRAINDO ARQUIVOS"
 progress_bar 5
 
 # Configurar arquivo .env
