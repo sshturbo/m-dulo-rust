@@ -93,7 +93,7 @@ if ! command -v docker &>/dev/null; then
     run_with_spinner "tar xzvf /tmp/$DOCKER_TGZ -C /tmp" "EXTRAINDO DOCKER"
     
     print_centered "MOVENDO BINÁRIOS PARA /USR/BIN/..."
-    run_with_spinner "sudo mv /tmp/docker/* /usr/bin/ && chmod +x /usr/bin/docker*" "MOVENDO BINÁRIOS"
+    run_with_spinner "mv /tmp/docker/* /usr/bin/" "MOVENDO BINÁRIOS"
     
     print_centered "INICIANDO O DAEMON DO DOCKER..."
     dockerd >/dev/null 2>&1 &
