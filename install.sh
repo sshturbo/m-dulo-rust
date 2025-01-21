@@ -74,7 +74,7 @@ run_with_spinner() {
 install_if_missing() {
     local package=$1
     if ! command -v $package &>/dev/null; then
-        run_with_spinner "sudo apt install -y $package" "INSTALANDO $package"
+        run_with_spinner "apt-get install -y $package" "INSTALANDO $package"
     else
         print_centered "$package JÁ ESTÁ INSTALADO."
     fi
@@ -92,7 +92,13 @@ fi
 # Atualização do Sistema
 # ===============================
 print_centered "ATUALIZANDO O SISTEMA..."
-run_with_spinner "sudo apt update && sudo apt upgrade -y" "ATUALIZANDO O SISTEMA"
+run_with_spinner "apt-get update" "ATUALIZANDO O SISTEMA"
+run_with_spinner "apt-get upgrade -y" "ATUALIZANDO O SISTEMA"
+
+# Instalar dependências
+for dep in "${DEPENDENCIES[@]}"; do
+    install_if_missing $dep
+done
 
 # ===============================
 # Instalação do Docker
@@ -104,7 +110,7 @@ if ! command -v docker &>/dev/null; then
     print_centered "EXTRAINDO ARQUIVOS DO DOCKER..."
     run_with_spinner "tar xzvf /tmp/$DOCKER_TGZ -C /tmp" "EXTRAINDO DOCKER"
 
-    print_centered "MOVENDO BINÁRIOS PARA /USR/BIN/..."
+    print_centered "MOVENDO BINÁRIOS PARA /USR/BIN..."
     run_with_spinner "cp /tmp/docker/* /usr/bin/" "MOVENDO BINÁRIOS"
 
     print_centered "INICIANDO O DAEMON DO DOCKER..."
@@ -121,9 +127,9 @@ rm -rf /tmp/docker /tmp/$DOCKER_TGZ
 # Instalação do Docker Compose
 # ===============================
 if ! command -v docker-compose &>/dev/null; then
-    
-    run_with_spinner "sudo curl -L "https://github.com/docker/compose/releases/download/$(curl -s https://api.github.com/repos/docker/compose/releases/latest | jq -r .tag_name)/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose" "BAIXANDO DOCKER COMPOSE"
-    run_with_spinner "sudo chmod +x /usr/local/bin/docker-compose" "CONFIGURANDO DOCKER COMPOSE"
+
+    run_with_spinner "curl -L "https://github.com/docker/compose/releases/download/$(curl -s https://api.github.com/repos/docker/compose/releases/latest | jq -r .tag_name)/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose" "BAIXANDO DOCKER COMPOSE"
+    run_with_spinner "chmod +x /usr/local/bin/docker-compose" "CONFIGURANDO DOCKER COMPOSE"
 else
     print_centered "DOCKER COMPOSE JÁ ESTÁ INSTALADO."
 fi
@@ -131,11 +137,6 @@ fi
 # ===============================
 # Configuração da Aplicação
 # ===============================
-# Instalar dependências
-for dep in "${DEPENDENCIES[@]}"; do
-    install_if_missing $dep
-done
-
 # Configurar diretório da aplicação
 if [ -d "$APP_DIR" ]; then
     print_centered "DIRETÓRIO $APP_DIR JÁ EXISTE. EXCLUINDO ANTIGO..."
@@ -148,7 +149,6 @@ if [ -d "$APP_DIR" ]; then
     run_with_spinner "rm -rf $APP_DIR" "EXCLUINDO DIRETÓRIO"
 else
     print_centered "DIRETÓRIO $APP_DIR NÃO EXISTE. NADA A EXCLUIR."
-    exit 1
 fi
 mkdir -p $APP_DIR
 
