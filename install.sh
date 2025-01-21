@@ -1,4 +1,4 @@
-]#!/bin/bash
+#!/bin/bash
 
 # ===============================
 # Configurações e Variáveis Globais
@@ -39,7 +39,7 @@ DOCKER_URL="$DOCKER_BASE_URL/$DOCKER_ARCH/$DOCKER_TGZ"
 # Funções Utilitárias
 # ===============================
 print_centered() {
-    printf "\e[33m%s\e[0m\n" "$1"
+    printf "%*s\n" $(((${#1} + $(tput cols)) / 2)) "$1"
 }
 
 progress_bar() {
@@ -48,7 +48,7 @@ progress_bar() {
         echo -n "#"
         sleep 0.1
     done
-    echo " COMPLETO!"
+    echo " Completo!"
 }
 
 run_with_spinner() {
@@ -62,15 +62,15 @@ run_with_spinner() {
         sleep 1
     done
     wait $pid
-    echo " FEITO!"
+    echo " Feito!"
 }
 
 install_if_missing() {
     local package=$1
     if ! command -v $package &>/dev/null; then
-        run_with_spinner "sudo apt install -y $package" "INSTALANDO $package"
+        run_with_spinner "sudo apt install -y $package" "Instalando $package"
     else
-        print_centered "$package JÁ ESTÁ INSTALADO."
+        print_centered "$package já está instalado."
     fi
 }
 
@@ -86,24 +86,28 @@ fi
 # Instalação do Docker
 # ===============================
 if ! command -v docker &>/dev/null; then
-    print_centered "BAIXANDO DOCKER BINÁRIO PARA ARQUITETURA $ARCH..."
-    run_with_spinner "wget -q -O /tmp/$DOCKER_TGZ $DOCKER_URL" "BAIXANDO DOCKER"
-    
-    print_centered "EXTRAINDO ARQUIVOS DO DOCKER..."
-    run_with_spinner "tar xzvf /tmp/$DOCKER_TGZ -C /tmp" "EXTRAINDO DOCKER"
-    
-    print_centered "MOVENDO BINÁRIOS PARA /USR/BIN/..."
-    run_with_spinner "mv /tmp/docker/* /usr/bin/" "MOVENDO BINÁRIOS"
-    
-    print_centered "INICIANDO O DAEMON DO DOCKER..."
-    dockerd >/dev/null 2>&1 &
-    print_centered "DOCKER INSTALADO COM SUCESSO!"
+    print_centered "Baixando Docker binário para arquitetura $ARCH..."
+    wget -q -O "/tmp/$DOCKER_TGZ" "$DOCKER_URL" || {
+        echo "Erro ao baixar o Docker binário."
+        exit 1
+    }
+
+    print_centered "Extraindo arquivos do Docker..."
+    tar xzvf "/tmp/$DOCKER_TGZ" -C /tmp &>/dev/null
+
+    print_centered "Movendo binários para /usr/bin/..."
+    cp /tmp/docker/* /usr/bin/
+    chmod +x /usr/bin/docker*
+
+    print_centered "Iniciando o daemon do Docker..."
+    dockerd &
+    print_centered "Docker instalado com sucesso!"
 else
-    print_centered "DOCKER JÁ ESTÁ INSTALADO."
+    print_centered "Docker já está instalado."
 fi
 
 # Limpeza temporária
-# rm -rf /tmp/docker /tmp/$DOCKER_TGZ
+rm -rf /tmp/docker /tmp/$DOCKER_TGZ
 
 # ===============================
 # Instalação do Docker Compose
@@ -113,10 +117,10 @@ if ! command -v docker-compose &>/dev/null; then
     COMPOSE_VERSION=$(curl -s "$DOCKER_COMPOSE_RELEASE_URL" | grep -oP '(?<="tag_name": ").*?(?=")')
     COMPOSE_URL="https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)"
 
-    run_with_spinner "sudo wget -q -O $DOCKER_COMPOSE_BIN $COMPOSE_URL" "BAIXANDO DOCKER COMPOSE"
-    run_with_spinner "sudo chmod +x $DOCKER_COMPOSE_BIN" "CONFIGURANDO DOCKER COMPOSE"
+    run_with_spinner "sudo wget -q -O $DOCKER_COMPOSE_BIN $COMPOSE_URL" "Baixando Docker Compose"
+    run_with_spinner "sudo chmod +x $DOCKER_COMPOSE_BIN" "Configurando Docker Compose"
 else
-    print_centered "DOCKER COMPOSE JÁ ESTÁ INSTALADO."
+    print_centered "Docker Compose já está instalado."
 fi
 
 # ===============================
@@ -129,17 +133,22 @@ done
 
 # Configurar diretório da aplicação
 if [ -d "$APP_DIR" ]; then
-    print_centered "DIRETÓRIO $APP_DIR JÁ EXISTE. EXCLUINDO ANTIGO..."
-    run_with_spinner "systemctl stop $SERVICE_FILE_NAME && systemctl disable $SERVICE_FILE_NAME && rm -rf $APP_DIR" "EXCLUINDO DIRETÓRIO"
+    print_centered "Diretório $APP_DIR já existe. Excluindo antigo..."
+    systemctl stop $SERVICE_FILE_NAME &>/dev/null
+    systemctl disable $SERVICE_FILE_NAME &>/dev/null
+    rm -rf $APP_DIR
 fi
 mkdir -p $APP_DIR
 
 # Baixar e configurar o módulo
-print_centered "BAIXANDO $FILE_NAME..."
-run_with_spinner "wget --timeout=30 -O $APP_DIR/$FILE_NAME $FILE_URL/$FILE_NAME" "BAIXANDO ARQUIVO"
+print_centered "Baixando $FILE_NAME..."
+wget --timeout=30 -O "$APP_DIR/$FILE_NAME" "$FILE_URL/$FILE_NAME" &>/dev/null || {
+    echo "Erro ao baixar o arquivo."
+    exit 1
+}
 
-print_centered "EXTRAINDO ARQUIVOS..."
-run_with_spinner "unzip -o $APP_DIR/$FILE_NAME -d $APP_DIR && rm $APP_DIR/$FILE_NAME" "EXTRAINDO ARQUIVOS"
+print_centered "Extraindo arquivos..."
+unzip "$APP_DIR/$FILE_NAME" -d "$APP_DIR" &>/dev/null && rm "$APP_DIR/$FILE_NAME"
 progress_bar 5
 
 # Configurar arquivo .env
@@ -157,11 +166,11 @@ else
 fi
 
 # Iniciar serviços com docker-compose
-print_centered "INICIANDO OS SERVIÇOS COM DOCKER-COMPOSE..."
+print_centered "Iniciando os serviços com docker-compose..."
 if docker-compose -f $DOCKER_COMPOSE_FILE up -d &>/dev/null; then
-    print_centered "SERVIÇOS INICIADOS COM SUCESSO!"
+    print_centered "Serviços iniciados com sucesso!"
 else
-    echo "ERRO AO INICIAR OS SERVIÇOS. VERIFIQUE OS LOGS DO DOCKER PARA MAIS DETALHES."
+    echo "Erro ao iniciar os serviços. Verifique os logs do Docker para mais detalhes."
     docker-compose -f $DOCKER_COMPOSE_FILE logs
     exit 1
 fi
@@ -173,11 +182,11 @@ if [ -f "$APP_DIR/$SERVICE_FILE_NAME" ]; then
     systemctl daemon-reload
     systemctl enable $SERVICE_FILE_NAME
     systemctl start $SERVICE_FILE_NAME
-    print_centered "SERVIÇO $SERVICE_FILE_NAME CONFIGURADO E INICIADO COM SUCESSO!"
+    print_centered "Serviço $SERVICE_FILE_NAME configurado e iniciado com sucesso!"
 else
     print_centered "Erro: Arquivo de serviço não encontrado."
     exit 1
 fi
 
 progress_bar 10
-print_centered "MÓDULO INSTALADO E CONFIGURADO COM SUCESSO!"
+print_centered "Módulo instalado e configurado com sucesso!"
