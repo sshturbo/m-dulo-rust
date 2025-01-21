@@ -1,5 +1,5 @@
 use axum::extract::{Path, State};
-use sqlx::{Pool, Postgres};
+use sqlx::{Pool, Sqlite};
 use std::process::Command;
 use log::{info, error};
 use std::fs;
@@ -17,7 +17,7 @@ pub enum ExcluirError {
 
 pub async fn excluir_usuario(
     Path((usuario, uuid)): Path<(String, Option<String>)>,
-    State(pool): State<Pool<Postgres>>,
+    State(pool): State<Pool<Sqlite>>,
 ) -> Result<String, ExcluirError> {
     info!("Tentativa de exclusão do usuário {}", usuario);
 
@@ -29,7 +29,7 @@ pub async fn excluir_usuario(
     if !output.status.success() {
         error!("Usuário {} não encontrado no sistema, excluindo do banco de dados", usuario);
 
-        sqlx::query("DELETE FROM users WHERE login = $1")
+        sqlx::query("DELETE FROM users WHERE login = ?")
             .bind(&usuario)
             .execute(&pool)
             .await
@@ -57,7 +57,7 @@ pub async fn excluir_usuario(
         .status()
         .map_err(|_| ExcluirError::FalhaComando)?;
 
-    sqlx::query("DELETE FROM users WHERE login = $1")
+    sqlx::query("DELETE FROM users WHERE login = ?")
         .bind(&usuario)
         .execute(&pool)
         .await

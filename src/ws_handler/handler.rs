@@ -1,6 +1,6 @@
 use axum::extract::ws::{WebSocketUpgrade, WebSocket, Message};
 use axum::response::IntoResponse;
-use sqlx::{Pool, Postgres};
+use sqlx::{Pool, Sqlite};
 use crate::routes::{
     excluir::excluir_usuario,
     excluir_global::excluir_global,
@@ -69,7 +69,7 @@ impl IntoResponse for CriarError {
 
 pub async fn websocket_handler(
     ws: WebSocketUpgrade,
-    pool: axum::extract::State<Pool<Postgres>>,
+    pool: axum::extract::State<Pool<Sqlite>>,
 ) -> impl IntoResponse {
     let db: Database = Arc::new(Mutex::new(HashMap::new()));
     ws.on_upgrade(move |socket| handle_socket(socket, db, pool.0))
@@ -77,7 +77,7 @@ pub async fn websocket_handler(
 
 pub async fn websocket_online_handler(
     ws: WebSocketUpgrade,
-    pool: axum::extract::State<Pool<Postgres>>,
+    pool: axum::extract::State<Pool<Sqlite>>,
 ) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_online_socket(socket, pool.0))
 }
@@ -85,7 +85,7 @@ pub async fn websocket_online_handler(
 async fn handle_socket(
     mut socket: WebSocket,
     db: Database,
-    pool: Pool<Postgres>,
+    pool: Pool<Sqlite>,
 ) {
     while let Some(Ok(msg)) = socket.recv().await {
         if let Message::Text(text) = msg {
@@ -100,7 +100,7 @@ async fn handle_socket(
 
 async fn handle_online_socket(
     mut socket: WebSocket,
-    pool: Pool<Postgres>,
+    pool: Pool<Sqlite>,
 ) {
     info!("Cliente conectado ao WebSocket /online");
 
@@ -124,7 +124,7 @@ async fn handle_online_socket(
     info!("Cliente desconectado do WebSocket /online");
 }
 
-async fn handle_message(text: &str, db: Database, pool: &Pool<Postgres>) -> Result<String, WsHandlerError> {
+async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result<String, WsHandlerError> {
     let parts: Vec<&str> = text.splitn(3, ':').collect();
     if parts.len() != 3 {
         return Err(WsHandlerError::FormatoInvalido);

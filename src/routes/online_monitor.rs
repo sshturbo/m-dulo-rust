@@ -1,21 +1,22 @@
-use sqlx::{Pool, Postgres, Error};
+use sqlx::{Pool, Sqlite, Error};
 use chrono::{NaiveDateTime, Local};
 use serde_json::json;
 use log::error;
 
-pub async fn monitor_users(pool: Pool<Postgres>) -> Result<serde_json::Value, Error> {
-    let rows = match sqlx::query!(
+#[derive(sqlx::FromRow)]
+struct OnlineUser {
+    login: String,
+    limite: i32,
+    inicio_sessao: String,
+    usuarios_online: bool,
+}
+
+pub async fn monitor_users(pool: Pool<Sqlite>) -> Result<serde_json::Value, Error> {
+    let rows = sqlx::query_as::<_, OnlineUser>(
         "SELECT login, limite, inicio_sessao, usuarios_online FROM online"
     )
     .fetch_all(&pool)
-    .await
-    {
-        Ok(rows) => rows,
-        Err(e) => {
-            error!("Erro ao executar query SELECT em monitor_users: {}", e);
-            return Err(e);
-        }
-    };
+    .await?;
 
     if rows.is_empty() {
         return Ok(json!({"message": "Nenhum usuário online no momento"}));
@@ -24,7 +25,7 @@ pub async fn monitor_users(pool: Pool<Postgres>) -> Result<serde_json::Value, Er
     let mut users = Vec::new();
 
     for row in rows {
-        let inicio_sessao = match NaiveDateTime::parse_from_str(&row.inicio_sessao, "%d/%m/%Y %H:%M:%S") {
+        let inicio_sessao = match NaiveDateTime::parse_from_str(&row.inicio_sessao, "%Y-%m-%d %H:%M:%S") {
             Ok(dt) => dt,
             Err(e) => {
                 error!("Erro ao parsear inicio_sessao para usuário '{}': {}", row.login, e);

@@ -1,19 +1,20 @@
 use crate::utils::online_utils::{get_users, execute_command};
-use sqlx::{Pool, Postgres};
+use sqlx::{Pool, Sqlite};
 use std::time::Duration;
 use tokio::time::sleep;
 use sqlx::Error;
 use log::error;
+use sqlx::Row;
 
-pub async fn monitor_online_users(pool: Pool<Postgres>) -> Result<(), Error> {
+pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
     loop {
         let start_time = std::time::Instant::now();
 
-        let online_users: Vec<String> = sqlx::query!("SELECT login FROM online")
+        let online_users: Vec<String> = sqlx::query("SELECT login FROM online")
             .fetch_all(&pool)
             .await?
             .into_iter()
-            .map(|row| row.login)
+            .map(|row| row.get::<String, _>("login"))
             .collect();
 
         if let Ok(users) = get_users() {
@@ -29,7 +30,8 @@ pub async fn monitor_online_users(pool: Pool<Postgres>) -> Result<(), Error> {
 
             for online_user in &online_users {
                 if !user_list.contains(&online_user.as_str()) {
-                    sqlx::query!("DELETE FROM online WHERE login = $1", online_user)
+                    sqlx::query("DELETE FROM online WHERE login = ?")
+                        .bind(online_user)
                         .execute(&pool)
                         .await?;
                 }
@@ -39,71 +41,65 @@ pub async fn monitor_online_users(pool: Pool<Postgres>) -> Result<(), Error> {
                 if user.is_empty() {
                     continue; 
                 }
-                match sqlx::query!(
-                    "SELECT id, login, dias, limite FROM users WHERE login = $1",
-                    user
+                match sqlx::query(
+                    "SELECT id, login, dias, limite FROM users WHERE login = ?"
                 )
+                .bind(user)
                 .fetch_optional(&pool)
                 .await
                 {
                     Ok(Some(row)) => {
-                        let expiry_date = chrono::Local::now() + chrono::Duration::days(row.dias as i64);
+                        let expiry_date = chrono::Local::now() + chrono::Duration::days(row.get::<i64, _>("dias"));
                         let current_date = chrono::Local::now().naive_local();
 
                         if current_date > expiry_date.naive_local() {
                             execute_command("pkill", &["-u", &user]).unwrap();
                             execute_command("userdel", &[&user]).unwrap();
-                            sqlx::query!(
-                                "UPDATE users SET suspenso = 'sim' WHERE login = $1",
-                                user
-                            )
-                            .execute(&pool)
-                            .await?;
+                            sqlx::query("UPDATE users SET suspenso = 'sim' WHERE login = ?")
+                                .bind(user)
+                                .execute(&pool)
+                                .await?;
                         } 
                         else {
-                            match sqlx::query!(
-                                "SELECT usuarios_online, limite FROM online WHERE login = $1",
-                                user
+                            match sqlx::query(
+                                "SELECT usuarios_online, limite FROM online WHERE login = ?"
                             )
+                            .bind(user)
                             .fetch_optional(&pool)
                             .await {
                                 Ok(Some(online_row)) => {
-                                    if online_row.limite != row.limite {
-                                        sqlx::query!(
-                                            "UPDATE online SET limite = $1 WHERE login = $2",
-                                            row.limite,
-                                            user
-                                        )
-                                        .execute(&pool)
-                                        .await?;
-                                    }
-
-                                    if let Some(online_users) = online_row.usuarios_online {
-                                        if online_users != *count {
-                                            sqlx::query!(
-                                                "UPDATE online SET usuarios_online = $1 WHERE login = $2",
-                                                *count,
-                                                user
-                                            )
+                                    if online_row.get::<i64, _>("limite") != row.get::<i64, _>("limite") {
+                                        sqlx::query("UPDATE online SET limite = ? WHERE login = ?")
+                                            .bind(row.get::<i64, _>("limite"))
+                                            .bind(user)
                                             .execute(&pool)
                                             .await?;
+                                    }
+
+                                    if let Some(online_users) = online_row.get::<Option<i64>, _>("usuarios_online") {
+                                        if online_users != *count {
+                                            sqlx::query("UPDATE online SET usuarios_online = ? WHERE login = ?")
+                                                .bind(*count)
+                                                .bind(user)
+                                                .execute(&pool)
+                                                .await?;
                                         }
 
-                                        if online_users > online_row.limite {
+                                        if online_users > online_row.get::<i64, _>("limite") {
                                             execute_command("pkill", &["-u", &user]).unwrap();
                                         }
                                     }
                                 },
                                 Ok(None) => {
-                                    sqlx::query!(
+                                    sqlx::query(
                                         "INSERT INTO online (login, limite, usuarios_online, inicio_sessao, status, byid)
-                                         VALUES ($1, $2, $3, $4, 'On', $5)",
-                                        user,
-                                        row.limite,
-                                        *count,
-                                        current_date.format("%d/%m/%Y %H:%M:%S").to_string(),
-                                        row.id
+                                         VALUES (?, ?, ?, ?, 'On', ?)"
                                     )
+                                    .bind(user)
+                                    .bind(row.get::<i64, _>("limite"))
+                                    .bind(*count)
+                                    .bind(current_date.format("%d/%m/%Y %H:%M:%S").to_string())
+                                    .bind(row.get::<i64, _>("id"))
                                     .execute(&pool)
                                     .await?;
                                 },

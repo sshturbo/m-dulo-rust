@@ -3,7 +3,7 @@ name = "m-dulo-rust"
 version = "0.1.0"
 edition = "2021"
 authors = ["Jefferson Hipolito de Oliveira <suporte@webhostpro.com.br>"]
-description = "O m-dulo-rust é um projeto em Rust que utiliza o framework web Axum para criar uma aplicação web assíncrona e de alto desempenho. Ele aproveita o Tokio para execução assíncrona, Serde para serialização/desserialização de dados em JSON, e um banco de dados SQLite via SQLx para persistência. A aplicação também utiliza UUIDs para geração de identifica"
+description = "O m-dulo é um projeto em Rust que utiliza o framework web Axum para criar uma aplicação web assíncrona e de alto desempenho. Ele aproveita o Tokio para execução assíncrona, Serde para serialização/desserialização de dados em JSON, e um banco de dados SQLite via SQLx para persistência. A aplicação também utiliza UUIDs para geração de identifica"
 license = "MIT"
 repository = "https://github.com/sshturbo/m-dulo-rust"
 readme = "README.md"
@@ -12,9 +12,9 @@ readme = "README.md"
 [dependencies]
 sqlx = { version = "0.7", features = [
     "runtime-tokio-rustls",
-    "postgres",
     "macros",
-    "migrate"
+    "migrate",
+    "sqlite"
 ] }
 axum = { version = "0.7", features = ["ws", "macros"] }
 tokio = { version = "1", features = ["full"] }

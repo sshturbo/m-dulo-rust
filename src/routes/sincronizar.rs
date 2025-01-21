@@ -1,5 +1,5 @@
 use crate::models::user::User;
-use sqlx::{Pool, Postgres};
+use sqlx::{Pool, Sqlite};
 use std::collections::HashMap;
 use tokio::sync::Mutex;
 use std::sync::Arc;
@@ -27,7 +27,7 @@ pub enum SyncError {
     ProcessarDadosUsuario,
 }
 
-pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Postgres>, usuarios: Vec<User>) -> Result<(), SyncError> {
+pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: Vec<User>) -> Result<(), SyncError> {
     let mut deve_reiniciar_v2ray = false;
 
     // Excluir todos os usuários recebidos do banco de dados
@@ -54,8 +54,8 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Postgres>, usuarios:
     Ok(())
 }
 
-pub async fn verificar_e_criar_usuario(db: Database, pool: &Pool<Postgres>, user: User) -> Result<(), SyncError> {
-    let existing_user = sqlx::query_scalar::<_, String>("SELECT login FROM users WHERE login = $1")
+pub async fn verificar_e_criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Result<(), SyncError> {
+    let existing_user = sqlx::query_scalar::<_, String>("SELECT login FROM users WHERE login = ?")
         .bind(&user.login)
         .fetch_optional(pool)
         .await
@@ -70,7 +70,7 @@ pub async fn verificar_e_criar_usuario(db: Database, pool: &Pool<Postgres>, user
     criar_usuario(db, pool, user).await
 }
 
-pub async fn excluir_usuario_sistema(usuario: &str, uuid: &Option<String>, pool: &Pool<Postgres>) -> Result<(), SyncError> {
+pub async fn excluir_usuario_sistema(usuario: &str, uuid: &Option<String>, pool: &Pool<Sqlite>) -> Result<(), SyncError> {
     let output = Command::new("id")
         .arg(usuario)
         .output()
@@ -97,7 +97,7 @@ pub async fn excluir_usuario_sistema(usuario: &str, uuid: &Option<String>, pool:
     }
 
     // Excluir o usuário do banco de dados
-    sqlx::query("DELETE FROM users WHERE login = $1")
+    sqlx::query("DELETE FROM users WHERE login = ?")
         .bind(usuario)
         .execute(pool)
         .await
@@ -106,11 +106,11 @@ pub async fn excluir_usuario_sistema(usuario: &str, uuid: &Option<String>, pool:
     Ok(())
 }
 
-pub async fn criar_usuario(db: Database, pool: &Pool<Postgres>, user: User) -> Result<(), SyncError> {
+pub async fn criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Result<(), SyncError> {
     let mut db = db.lock().await;
 
     sqlx::query(
-        "INSERT INTO users (login, senha, dias, limite, uuid) VALUES ($1, $2, $3, $4, $5)"
+        "INSERT INTO users (login, senha, dias, limite, uuid) VALUES (?, ?, ?, ?, ?)"
     )
     .bind(&user.login)
     .bind(&user.senha)
@@ -245,7 +245,6 @@ async fn remover_uuid_v2ray(uuid: &str) {
                                     client["id"].as_str().unwrap_or("") != uuid
                                 });
 
-                    
                                 if let Ok(new_content) = serde_json::to_string_pretty(&json) {
                                     if fs::write(config_path, new_content).is_ok() {
                                     }

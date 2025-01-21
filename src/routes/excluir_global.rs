@@ -1,4 +1,4 @@
-use sqlx::{Pool, Postgres};
+use sqlx::{Pool, Sqlite};
 use std::process::Command;
 use std::fs;
 use serde_json::Value;
@@ -21,7 +21,7 @@ pub enum ExcluirGlobalError {
 }
 
 pub async fn excluir_global(
-    pool: Pool<Postgres>,
+    pool: Pool<Sqlite>,
     payload: ExcluirGlobalRequest,
 ) -> Result<(), ExcluirGlobalError> {
     let mut uuids_to_remove = Vec::new();
@@ -29,7 +29,7 @@ pub async fn excluir_global(
     let mut deve_reiniciar_v2ray = false;
 
     for usuario in &payload.usuarios {
-        let user_exists = sqlx::query("SELECT 1 FROM users WHERE login = $1")
+        let user_exists = sqlx::query("SELECT 1 FROM users WHERE login = ?")
             .bind(&usuario.usuario)
             .fetch_optional(&pool)
             .await
@@ -68,7 +68,7 @@ pub async fn excluir_global(
             .status()
             .map_err(|_| ExcluirGlobalError::ExcluirUsuario)?;
 
-        let _ = sqlx::query("DELETE FROM users WHERE login = $1")
+        let _ = sqlx::query("DELETE FROM users WHERE login = ?")
             .bind(&usuario)
             .execute(&pool)
             .await

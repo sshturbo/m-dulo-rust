@@ -1,11 +1,11 @@
 /target
+/db
 /aarch64-unknown-linux-musl
 /x86_64-unknown-linux-musl
 
 .vscode
 .env
 .env.example
-db/banco.sqlite
 
 Cargo.lock
 *.log

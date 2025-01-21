@@ -1,4 +1,4 @@
-use sqlx::{Pool, Postgres};
+use sqlx::{Pool, Sqlite};
 use std::process::Command;
 use crate::models::user::User;
 use crate::models::edit::EditRequest;
@@ -26,12 +26,12 @@ pub enum EditarError {
 
 pub async fn editar_usuario(
     db: Database,
-    pool: &Pool<Postgres>,
+    pool: &Pool<Sqlite>,
     edit_req: EditRequest
 ) -> Result<(), EditarError> {
     let mut db = db.lock().await;
 
-    let existing_user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE login = $1")
+    let existing_user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE login = ?")
         .bind(&edit_req.login_antigo)
         .fetch_optional(pool)
         .await
@@ -41,7 +41,7 @@ pub async fn editar_usuario(
         return Err(EditarError::UsuarioNaoEncontrado);
     }
 
-    let new_user_check = sqlx::query_as::<_, User>("SELECT * FROM users WHERE login = $1")
+    let new_user_check = sqlx::query_as::<_, User>("SELECT * FROM users WHERE login = ?")
         .bind(&edit_req.login_novo)
         .fetch_optional(pool)
         .await
@@ -69,7 +69,7 @@ pub async fn editar_usuario(
     };
 
     let result = sqlx::query(
-        "UPDATE users SET login = $1, senha = $2, dias = $3, limite = $4, uuid = $5 WHERE login = $6"
+        "UPDATE users SET login = ?, senha = ?, dias = ?, limite = ?, uuid = ? WHERE login = ?"
     )
     .bind(&new_user.login)
     .bind(&new_user.senha)
