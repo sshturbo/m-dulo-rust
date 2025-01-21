@@ -1,6 +1,12 @@
 #!/bin/bash
 
 # ===============================
+# Atualização do Sistema
+# ===============================
+print_centered "ATUALIZANDO O SISTEMA..."
+run_with_spinner "sudo apt update && sudo apt upgrade -y" "ATUALIZANDO O SISTEMA"
+
+# ===============================
 # Configurações e Variáveis Globais
 # ===============================
 APP_DIR="/opt/myapp"
