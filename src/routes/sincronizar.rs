@@ -5,9 +5,11 @@ use tokio::sync::Mutex;
 use std::sync::Arc;
 use std::process::Command;
 use thiserror::Error;
-use crate::utils::user_utils::{process_user_data, remover_uuids_xray, remover_uuid_v2ray};
+use crate::utils::user_utils::{remover_uuids_xray, remover_uuid_v2ray};
 use std::fs;
 use serde_json::Value;
+use crate::utils::restart_v2ray::reiniciar_v2ray;
+use crate::utils::restart_xray::reiniciar_xray;
 
 pub type Database = Arc<Mutex<HashMap<String, User>>>;
 
@@ -16,9 +18,7 @@ pub enum SyncError {
     #[error("Erro ao verificar usuário: {0}")]
     VerificarUsuario(String),
     #[error("Erro ao inserir usuário no banco de dados: {0}")]
-    InserirUsuarioBanco(String),
-    #[error("Erro ao processar dados do usuário")]
-    ProcessarDadosUsuario,
+    InserirUsuarioBanco(String)
 }
 
 pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: Vec<User>) -> Result<(), SyncError> {
@@ -102,7 +102,7 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
                         }
                     }
                 }
-                new_clients.reverse(); // Para manter a ordem original
+                new_clients.reverse();
                 if all_valid {
                     let mut updated = false;
                     if let Some(inbounds) = json.get_mut("inbounds") {
@@ -120,7 +120,7 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
                         if let Ok(new_content) = serde_json::to_string_pretty(&json) {
                             if fs::write(tmp_path, new_content).is_ok() {
                                 let _ = fs::rename(tmp_path, config_path_xray);
-                                let _ = Command::new("systemctl").arg("restart").arg("xray.service").status();
+                                reiniciar_xray().await;
                             }
                         }
                     }
@@ -157,7 +157,7 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
                                     if let Ok(new_content) = serde_json::to_string_pretty(&json) {
                                         if fs::write(tmp_path, new_content).is_ok() {
                                             let _ = fs::rename(tmp_path, config_path_v2ray);
-                                            let _ = Command::new("systemctl").arg("restart").arg("v2ray.service").status();
+                                            reiniciar_v2ray().await;
                                         }
                                     }
                                 }
@@ -167,11 +167,6 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
                 }
             }
         }
-    }
-
-    // Processar dados do usuário (criação no sistema)
-    for user in usuarios {
-        process_user_data(user).await.map_err(|_| SyncError::ProcessarDadosUsuario)?;
     }
     Ok(())
 }
