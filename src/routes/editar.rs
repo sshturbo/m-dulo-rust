@@ -5,7 +5,7 @@ use crate::models::edit::EditRequest;
 use std::collections::HashMap;
 use tokio::sync::Mutex;
 use std::sync::Arc;
-use crate::utils::user_utils::{process_user_data, remover_uuid_v2ray, remover_uuids_xray, atualizar_email_xray, atualizar_email_v2ray};
+use crate::utils::user_utils::{process_user_data, remover_uuid_v2ray, remover_uuids_xray, atualizar_email_xray, atualizar_email_v2ray, adicionar_usuario_sistema, atualizar_uuid_xray, atualizar_uuid_v2ray};
 use thiserror::Error;
 
 pub type Database = Arc<Mutex<HashMap<String, User>>>;
@@ -119,8 +119,27 @@ pub async fn editar_usuario(
             let uuid_antigo = existing_user.as_ref().unwrap().uuid.as_ref();
             let tipo_novo = edit_req.tipo.as_str();
             let uuid_novo = edit_req.uuid.as_ref();
-            if uuid_antigo != uuid_novo || tipo_antigo != tipo_novo {
+            if tipo_antigo != tipo_novo {
+                // Mudou o tipo: remove do antigo, cria no novo
+                let _ = adicionar_usuario_sistema(&new_user.login, &new_user.senha, new_user.dias as u32, new_user.limite as u32);
                 process_user_data(new_user).await.map_err(|_| EditarError::ProcessarDadosUsuario)?;
+            } else if uuid_antigo != uuid_novo {
+                // Só mudou o uuid: atualiza o uuid no JSON
+                if let (Some(uuid_antigo), Some(uuid_novo)) = (uuid_antigo, uuid_novo) {
+                    match tipo_antigo {
+                        "xray" => { let _ = atualizar_uuid_xray(uuid_antigo, uuid_novo); },
+                        "v2ray" => { let _ = atualizar_uuid_v2ray(uuid_antigo, uuid_novo); },
+                        _ => {}
+                    }
+                }
+            } else if edit_req.login_antigo != edit_req.login_novo {
+                // Só mudou o login: atualiza o email no JSON e cria usuário no SO
+                let _ = adicionar_usuario_sistema(&new_user.login, &new_user.senha, new_user.dias as u32, new_user.limite as u32);
+                if let (Some(uuid), "xray") = (uuid_antigo, tipo_antigo) {
+                    let _ = atualizar_email_xray(uuid, &edit_req.login_novo);
+                } else if let (Some(uuid), "v2ray") = (uuid_antigo, tipo_antigo) {
+                    let _ = atualizar_email_v2ray(uuid, &edit_req.login_novo);
+                }
             }
             Ok(())
         }
