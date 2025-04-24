@@ -5,7 +5,7 @@ use crate::models::edit::EditRequest;
 use std::collections::HashMap;
 use tokio::sync::Mutex;
 use std::sync::Arc;
-use crate::utils::user_utils::{process_user_data, remover_uuid_v2ray, remover_uuids_xray};
+use crate::utils::user_utils::{process_user_data, remover_uuid_v2ray, remover_uuids_xray, atualizar_email_xray, atualizar_email_v2ray};
 use thiserror::Error;
 
 pub type Database = Arc<Mutex<HashMap<String, User>>>;
@@ -58,6 +58,13 @@ pub async fn editar_usuario(
                         remover_uuid_v2ray(uuid).await;
                     }
                 }
+            }
+        } else if edit_req.login_antigo != edit_req.login_novo {
+            // Se login mudou, mas tipo e uuid são os mesmos, atualizar o email no JSON
+            if let (Some(uuid), "xray") = (uuid_antigo, tipo_antigo) {
+                let _ = atualizar_email_xray(uuid, &edit_req.login_novo);
+            } else if let (Some(uuid), "v2ray") = (uuid_antigo, tipo_antigo) {
+                let _ = atualizar_email_v2ray(uuid, &edit_req.login_novo);
             }
         }
     }

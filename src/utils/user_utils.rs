@@ -203,3 +203,59 @@ pub async fn remover_uuids_xray(uuids: &[String]) {
         }
     }
 }
+
+pub fn atualizar_email_xray(uuid: &str, novo_login: &str) -> Result<(), String> {
+    let config_file = "/usr/local/etc/xray/config.json";
+    if !Path::new(config_file).exists() {
+        return Err("Arquivo de configuração do Xray não encontrado.".to_string());
+    }
+    let json_content = std::fs::read_to_string(config_file).map_err(|_| "Falha ao ler config.json")?;
+    let mut json_value: serde_json::Value = serde_json::from_str(&json_content).map_err(|_| "Falha ao parsear JSON")?;
+    let mut alterado = false;
+    if let Some(inbounds) = json_value["inbounds"].as_array_mut() {
+        for inbound in inbounds.iter_mut() {
+            if inbound["protocol"] == "vless" {
+                if let Some(clients) = inbound["settings"]["clients"].as_array_mut() {
+                    for client in clients.iter_mut() {
+                        if client["id"] == uuid {
+                            client["email"] = serde_json::Value::String(novo_login.to_string());
+                            alterado = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if alterado {
+        std::fs::write(config_file, serde_json::to_string_pretty(&json_value).map_err(|_| "Erro ao serializar JSON")?)
+            .map_err(|_| "Falha ao salvar config.json")?;
+    }
+    Ok(())
+}
+
+pub fn atualizar_email_v2ray(uuid: &str, novo_login: &str) -> Result<(), String> {
+    let config_file = "/etc/v2ray/config.json";
+    if !Path::new(config_file).exists() {
+        return Err("Arquivo de configuração do V2Ray não encontrado.".to_string());
+    }
+    let json_content = std::fs::read_to_string(config_file).map_err(|_| "Falha ao ler config.json")?;
+    let mut json_value: serde_json::Value = serde_json::from_str(&json_content).map_err(|_| "Falha ao parsear JSON")?;
+    let mut alterado = false;
+    if let Some(inbounds) = json_value["inbounds"].as_array_mut() {
+        for inbound in inbounds.iter_mut() {
+            if let Some(clients) = inbound["settings"]["clients"].as_array_mut() {
+                for client in clients.iter_mut() {
+                    if client["id"] == uuid {
+                        client["email"] = serde_json::Value::String(novo_login.to_string());
+                        alterado = true;
+                    }
+                }
+            }
+        }
+    }
+    if alterado {
+        std::fs::write(config_file, serde_json::to_string_pretty(&json_value).map_err(|_| "Erro ao serializar JSON")?)
+            .map_err(|_| "Falha ao salvar config.json")?;
+    }
+    Ok(())
+}
