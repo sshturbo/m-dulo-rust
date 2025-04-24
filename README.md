@@ -35,9 +35,10 @@
     ```
 
 5. Execute o projeto:
-    ```sh
-    cargo run
-    ```
+
+```
+cargo run
+```
 
 ## Rotas via WebSocket
 
@@ -50,7 +51,7 @@
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001');
     socket.onopen = () => {
-        socket.send('seu_token_aqui:CRIAR:{"login": "teste2", "senha": "102030", "dias": 30, "limite": 1, "uuid": null}');
+        socket.send('seu_token_aqui:CRIAR:{"login": "teste2", "senha": "102030", "dias": 30, "limite": 1, "uuid": null, "tipo": "xray"}');
     };
     ```
 
@@ -89,7 +90,7 @@
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001');
     socket.onopen = () => {
-        socket.send('seu_token_aqui:SINCRONIZAR:[{"login":"user1","senha":"password1","dias":30,"limite":5,"uuid":"uuid1"},{"login":"user2","senha":"password2","dias":30,"limite":5,"uuid": null}]');
+        socket.send('seu_token_aqui:SINCRONIZAR:[{"login":"user1","senha":"password1","dias":30,"limite":5,"uuid":"uuid1","tipo":"v2ray"},{"login":"user2","senha":"password2","dias":30,"limite":5,"uuid": null,"tipo":"xray"}]');
     };
     ```
 
@@ -102,7 +103,7 @@
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001');
     socket.onopen = () => {
-        socket.send('seu_token_aqui:EDITAR:{"login_antigo": "teste2", "login_novo": "teste3", "senha": "nova_senha", "dias": 30, "limite": 1, "uuid": null}');
+        socket.send('seu_token_aqui:EDITAR:{"login_antigo": "teste2", "login_novo": "teste3", "senha": "nova_senha", "dias": 30, "limite": 1, "uuid": null, "tipo": "v2ray"}');
     };
     ```
 
@@ -111,6 +112,7 @@
 - **Rota:** `ONLINE`
 - **Método:** WebSocket
 - **Descrição:** Esta rota se conecta ao WebSocket `ws://127.0.0.1:9001/online` e começa a enviar uma lista de usuários online em JSON com o login, limite e o tempo que está online. Se não houver nenhum usuário online, retorna a mensagem em JSON `{"message":"Nenhum usuário online no momento."}`.
+
 - **Exemplo de uso:**
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001/online');
@@ -121,3 +123,14 @@
         console.log('Usuários online:', event.data);
     };
     ```
+    
+## Observação sobre o campo `tipo`
+
+O campo `"tipo"` (com valor `"v2ray"` ou `"xray"`) é **obrigatório** nas rotas de criação, edição e sincronização de usuários via WebSocket:
+
+- CRIAR
+- EDITAR
+- SINCRONIZAR
+
+**Não é necessário enviar o campo `tipo` nas rotas de exclusão** (`EXCLUIR`, `EXCLUIR_GLOBAL`), pois o backend busca o tipo do usuário diretamente no banco de dados antes de remover.
+    

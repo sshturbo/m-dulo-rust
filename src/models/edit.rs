@@ -8,4 +8,5 @@ pub struct EditRequest {
     pub dias: u32,
     pub limite: u32,
     pub uuid: Option<String>, 
+    pub tipo: String, // "v2ray" ou "xray"
 }

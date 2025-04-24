@@ -141,6 +141,9 @@ async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result
         "CRIAR" => {
             let user: User = serde_json::from_str(dados)
                 .map_err(|_| WsHandlerError::DadosUsuarioInvalidos)?;
+            if user.tipo != "v2ray" && user.tipo != "xray" {
+                return Err(WsHandlerError::DadosUsuarioInvalidos);
+            }
             criar_usuario(db.clone(), &pool, user).await?;
             Ok("Usuário criado com sucesso!".to_string())
         },
@@ -158,12 +161,18 @@ async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result
         "SINCRONIZAR" => {
             let usuarios: Vec<User> = serde_json::from_str(dados)
                 .map_err(|_| WsHandlerError::DadosUsuarioInvalidos)?;
+            if usuarios.iter().any(|u| u.tipo != "v2ray" && u.tipo != "xray") {
+                return Err(WsHandlerError::DadosUsuarioInvalidos);
+            }
             sincronizar_usuarios(db, pool, usuarios).await.map_err(WsHandlerError::SincronizarUsuarios)?;
             Ok("Usuários sincronizados com sucesso!".to_string())
         },
         "EDITAR" => {
             let edit_req: EditRequest = serde_json::from_str(dados)
                 .map_err(|_| WsHandlerError::DadosEdicaoInvalidos)?;
+            if edit_req.tipo != "v2ray" && edit_req.tipo != "xray" {
+                return Err(WsHandlerError::DadosUsuarioInvalidos);
+            }
             editar_usuario(db, pool, edit_req).await.map_err(WsHandlerError::EditarUsuario)?;
             Ok("Usuário editado com sucesso!".to_string())
         },

@@ -5,7 +5,7 @@ use crate::models::edit::EditRequest;
 use std::collections::HashMap;
 use tokio::sync::Mutex;
 use std::sync::Arc;
-use crate::utils::user_utils::process_user_data;
+use crate::utils::user_utils::{process_user_data, remover_uuid_v2ray, remover_uuids_xray};
 use thiserror::Error;
 
 pub type Database = Arc<Mutex<HashMap<String, User>>>;
@@ -41,6 +41,27 @@ pub async fn editar_usuario(
         return Err(EditarError::UsuarioNaoEncontrado);
     }
 
+    // Verificação e remoção do uuid antigo se necessário
+    if let Some(old_user) = &existing_user {
+        let tipo_antigo = old_user.tipo.as_str();
+        let uuid_antigo = old_user.uuid.as_ref();
+        let tipo_novo = edit_req.tipo.as_str();
+        let uuid_novo = edit_req.uuid.as_ref();
+        // Se uuid mudou ou tipo mudou, remover do serviço antigo
+        if uuid_antigo != uuid_novo || tipo_antigo != tipo_novo {
+            if let Some(uuid) = uuid_antigo {
+                match tipo_antigo {
+                    "xray" => {
+                        remover_uuids_xray(&vec![uuid.clone()]).await;
+                    },
+                    _ => {
+                        remover_uuid_v2ray(uuid).await;
+                    }
+                }
+            }
+        }
+    }
+
     let new_user_check = sqlx::query_as::<_, User>("SELECT * FROM users WHERE login = ?")
         .bind(&edit_req.login_novo)
         .fetch_optional(pool)
@@ -66,16 +87,18 @@ pub async fn editar_usuario(
         dias: edit_req.dias as i32,
         limite: edit_req.limite as i32,
         uuid: edit_req.uuid.clone(),
+        tipo: edit_req.tipo.clone(),
     };
 
     let result = sqlx::query(
-        "UPDATE users SET login = ?, senha = ?, dias = ?, limite = ?, uuid = ? WHERE login = ?"
+        "UPDATE users SET login = ?, senha = ?, dias = ?, limite = ?, uuid = ?, tipo = ? WHERE login = ?"
     )
     .bind(&new_user.login)
     .bind(&new_user.senha)
     .bind(new_user.dias as i64)
     .bind(new_user.limite as i64)
     .bind(&new_user.uuid)
+    .bind(&new_user.tipo)
     .bind(&edit_req.login_antigo)
     .execute(pool)
     .await;

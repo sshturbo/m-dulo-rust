@@ -8,4 +8,5 @@ pub struct User {
     pub dias: i32,
     pub limite: i32,
     pub uuid: Option<String>,
+    pub tipo: String,
 }
