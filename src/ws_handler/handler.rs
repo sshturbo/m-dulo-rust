@@ -15,7 +15,7 @@ use crate::models::user::User;
 use crate::models::delete::DeleteRequest;
 use crate::models::delete_global::ExcluirGlobalRequest;
 use crate::models::edit::EditRequest;
-use std::env;
+use crate::config::Config;
 use thiserror::Error;
 use crate::routes::online_monitor::monitor_users;
 use axum::http::StatusCode;
@@ -27,8 +27,8 @@ use serde_json::json;
 
 #[derive(Error, Debug)]
 pub enum WsHandlerError {
-    #[error("Token não configurado")]
-    TokenNaoConfigurado,
+    // #[error("Token não configurado")]
+    // TokenNaoConfigurado,
     #[error("Token inválido")]
     TokenInvalido,
     #[error("Formato inválido. Use TOKEN:COMANDO:DADOS (exemplo: TOKEN:CRIAR:{{...}})")]
@@ -132,7 +132,7 @@ async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result
 
     let (token, comando, dados) = (parts[0], parts[1], parts[2]);
     
-    let expected_token = env::var("API_TOKEN").map_err(|_| WsHandlerError::TokenNaoConfigurado)?;
+    let expected_token = &Config::get().api_token;
     if token != expected_token {
         return Err(WsHandlerError::TokenInvalido);
     }

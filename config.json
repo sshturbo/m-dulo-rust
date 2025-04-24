@@ -1,0 +1,4 @@
+{
+    "api_token": "SUA_API_TOKEN_AQUI",
+    "database_url": "db/database.sqlite"
+  }

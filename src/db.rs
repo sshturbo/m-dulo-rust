@@ -1,15 +1,11 @@
 use sqlx::{Pool, Sqlite, SqlitePool};
-use dotenv::dotenv;
-use std::env;
+use crate::config::Config;
 use std::fs;
 use std::path::Path;
 
 pub async fn initialize_db() -> Result<Pool<Sqlite>, sqlx::Error> {
-    // Carregar variáveis de ambiente
-    dotenv().ok();
-
-    // Obter caminho do banco de dados
-    let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| "db/database.sqlite".to_string());
+    // Obter caminho do banco de dados do config.json
+    let database_url = &Config::get().database_url;
 
     // Criar diretório se não existir
     let db_dir = Path::new("db");
@@ -18,13 +14,13 @@ pub async fn initialize_db() -> Result<Pool<Sqlite>, sqlx::Error> {
     }
 
     // Criar o arquivo do banco de dados, se não existir
-    let db_path = Path::new(&database_url);
+    let db_path = Path::new(database_url);
     if !db_path.exists() {
         fs::File::create(db_path).expect("Falha ao criar arquivo do banco de dados");
     }
 
     // Conectar ao banco de dados
-    let pool = SqlitePool::connect(&database_url).await?;
+    let pool = SqlitePool::connect(database_url).await?;
 
     // Criar tabelas, se não existirem
     sqlx::query(

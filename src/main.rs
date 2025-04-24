@@ -21,6 +21,7 @@ mod utils {
     pub mod user_utils;
     pub mod online_utils;
 }
+mod config;
 
 use axum::{
     routing::get,
@@ -39,9 +40,10 @@ use crate::routes::online::monitor_online_users;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Carregar configuração do config.json
+    config::Config::load_from_file("config.json");
     // Inicializa o logger com o filtro de log configurado
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
-    dotenv::dotenv().ok();
     
     // Inicializa o banco de dados antes de qualquer outra coisa
     let pool = initialize_db()
