@@ -6,10 +6,16 @@
 APP_DIR="/opt/myapp"
 DEPENDENCIES=("unzip")
 VERSION="1.0.3"
-AUTHENTICATION_API_KEY=$(openssl rand -hex 16)
 FILE_URL="https://github.com/sshturbo/m-dulo-rust/releases/download/$VERSION"
 ARCH=$(uname -m)
 SERVICE_FILE_NAME="m-dulo.service"
+
+# Verifica se o token foi passado como argumento
+if [ -z "$1" ]; then
+    echo "Uso: $0 <API_TOKEN>"
+    exit 1
+fi
+API_TOKEN="$1"
 
 # Determinar arquitetura e nome do arquivo para download
 case $ARCH in
@@ -120,8 +126,13 @@ run_with_spinner "unzip $APP_DIR/$FILE_NAME -d $APP_DIR" "EXTRAINDO ARQUIVOS"
 run_with_spinner "rm $APP_DIR/$FILE_NAME" "REMOVENDO ARQUIVO ZIP"
 progress_bar 5
 
-# Configurar arquivo .env
-cp "$APP_DIR/.env.exemple" "$APP_DIR/.env"
+# Criar arquivo config.json
+cat > "$APP_DIR/config.json" <<EOF
+{
+    "api_token": "$API_TOKEN",
+    "database_url": "db/database.sqlite"
+}
+EOF
 chmod -R 775 $APP_DIR
 
 # Configurar serviço systemd
