@@ -8,7 +8,7 @@
 
 ## Instalação rapida ja com o binario gerado.
 
-    ```bash
+    ```sh
     wget -qO- https://raw.githubusercontent.com/sshturbo/m-dulo-rust/refs/heads/master/install.sh | sudo bash -s d6dbaa87ceda172a41971ad3796056d4
     ```
     
