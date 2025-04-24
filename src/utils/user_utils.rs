@@ -4,7 +4,6 @@ use std::io::Write;
 use std::process::Command;
 use crate::models::user::User;
 use crate::utils::restart_v2ray::reiniciar_v2ray;
-use crate::utils::email::gerar_email_aleatorio;
 use std::path::Path;
 use crate::utils::restart_xray::reiniciar_xray;
 use tokio;
@@ -77,7 +76,7 @@ pub fn adicionar_uuid_ao_v2ray(uuid: &str, nome_usuario: &str, dias: u32) -> Res
         return Err("Arquivo de configuração do V2Ray não encontrado.".to_string());
     }
 
-    let email = gerar_email_aleatorio(10);
+    let email = nome_usuario;
     let final_date = (Utc::now() + Duration::days(dias as i64)).format("%Y-%m-%d").to_string();
 
     let json_content = fs::read_to_string(config_file).map_err(|_| "Falha ao ler o arquivo de configuração.")?;

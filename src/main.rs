@@ -18,7 +18,6 @@ mod db;
 mod utils {
     pub mod restart_v2ray;
     pub mod restart_xray;
-    pub mod email;
     pub mod user_utils;
     pub mod online_utils;
 }
