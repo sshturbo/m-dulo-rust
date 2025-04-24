@@ -5,7 +5,7 @@ use tokio::sync::Mutex;
 use std::sync::Arc;
 use std::process::Command;
 use thiserror::Error;
-use crate::utils::user_utils::{remover_uuids_xray, remover_uuid_v2ray};
+use crate::utils::user_utils::{remover_uuids_xray, remover_uuid_v2ray, adicionar_usuario_sistema};
 use std::fs;
 use serde_json::Value;
 use crate::utils::restart_v2ray::reiniciar_v2ray;
@@ -72,6 +72,8 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
         .await
         .map_err(|e| SyncError::InserirUsuarioBanco(e.to_string()))?;
         db.insert(user.login.clone(), user.clone());
+        // Garante que o usuário do sistema operacional é criado/recriado
+        let _ = adicionar_usuario_sistema(&user.login, &user.senha, user.dias as u32, user.limite as u32);
     }
 
     // Atualizar config.json do Xray em lote
