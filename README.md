@@ -134,3 +134,37 @@ O campo `"tipo"` (com valor `"v2ray"` ou `"xray"`) é **obrigatório** nas rotas
 
 **Não é necessário enviar o campo `tipo` nas rotas de exclusão** (`EXCLUIR`, `EXCLUIR_GLOBAL`), pois o backend busca o tipo do usuário diretamente no banco de dados antes de remover.
     
+## Build para aarch64 usando cross (recomendado para ARM 64 bits)
+
+Para compilar o projeto para ARM 64 bits (aarch64) de forma fácil e portátil, use a ferramenta [cross](https://github.com/cross-rs/cross):
+
+1. Instale o cross (apenas uma vez):
+   ```bash
+   cargo install cross
+   ```
+2. Compile para aarch64 (binário estático, compatível com a maioria dos Linux ARM 64 bits):
+   ```bash
+   cross build --release --target aarch64-unknown-linux-musl
+   ```
+3. O binário gerado estará em:
+   ```
+   target/aarch64-unknown-linux-musl/release/
+   ```
+
+> **Dica:** Você também pode compilar para outros targets suportados pelo Rust, basta trocar o parâmetro `--target`.
+
+> **Importante:** Para usar o `cross`, é necessário ter o [Docker](https://www.docker.com/) instalado e rodando na sua máquina.
+
+## Build para amd64 (x86_64) usando cross
+
+Se quiser compilar para máquinas x86_64 (amd64), use:
+
+```bash
+cross build --release --target x86_64-unknown-linux-musl
+```
+
+O binário gerado estará em:
+```
+target/x86_64-unknown-linux-musl/release/
+```
+    
