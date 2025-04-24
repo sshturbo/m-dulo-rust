@@ -80,44 +80,45 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
         if let Ok(content) = fs::read_to_string(config_path_xray) {
             if let Ok(mut json) = serde_json::from_str::<Value>(&content) {
                 let mut erro_xray = false;
+                let mut updated = false;
                 if let Some(inbounds) = json.get_mut("inbounds") {
-                    for inbound in inbounds.as_array_mut().unwrap() {
-                        if inbound["protocol"] == "vless" {
-                            // Montar nova lista de clients primeiro
-                            let mut new_clients = Vec::new();
-                            let mut seen_uuids = std::collections::HashSet::new();
-                            let mut all_valid = true;
-                            for user in &usuarios {
-                                if user.tipo == "xray" {
-                                    if let Some(uuid) = &user.uuid {
-                                        if !uuid.is_empty() && seen_uuids.insert(uuid.clone()) {
-                                            new_clients.push(serde_json::json!({
-                                                "email": user.login,
-                                                "id": uuid,
-                                                "level": 0
-                                            }));
-                                        } else {
-                                            all_valid = false;
-                                            break;
-                                        }
-                                    } else {
-                                        all_valid = false;
-                                        break;
-                                    }
-                                }
-                            }
-                            if all_valid {
-                                if let Some(settings) = inbound.get_mut("settings") {
-                                    settings["clients"] = serde_json::Value::Array(new_clients);
+                    // Montar nova lista de clients apenas uma vez
+                    let mut new_clients = Vec::new();
+                    let mut seen_uuids = std::collections::HashSet::new();
+                    let mut all_valid = true;
+                    for user in &usuarios {
+                        if user.tipo == "xray" {
+                            if let Some(uuid) = &user.uuid {
+                                if !uuid.is_empty() && seen_uuids.insert(uuid.clone()) {
+                                    new_clients.push(serde_json::json!({
+                                        "email": user.login,
+                                        "id": uuid,
+                                        "level": 0
+                                    }));
+                                } else {
+                                    all_valid = false;
+                                    break;
                                 }
                             } else {
-                                erro_xray = true;
+                                all_valid = false;
                                 break;
                             }
                         }
                     }
+                    if all_valid {
+                        for inbound in inbounds.as_array_mut().unwrap() {
+                            if inbound["protocol"] == "vless" && !updated {
+                                if let Some(settings) = inbound.get_mut("settings") {
+                                    settings["clients"] = serde_json::Value::Array(new_clients.clone());
+                                    updated = true;
+                                }
+                            }
+                        }
+                    } else {
+                        erro_xray = true;
+                    }
                 }
-                if !erro_xray {
+                if !erro_xray && updated {
                     let tmp_path = "/usr/local/etc/xray/config.json.tmp";
                     if let Ok(new_content) = serde_json::to_string_pretty(&json) {
                         if fs::write(tmp_path, new_content).is_ok() {
@@ -125,7 +126,7 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
                             let _ = Command::new("systemctl").arg("restart").arg("xray.service").status();
                         }
                     }
-                } else {
+                } else if erro_xray {
                     eprintln!("Erro: Usuário xray sem uuid válido ou uuid duplicado. Configuração do Xray não foi atualizada.");
                 }
             }
