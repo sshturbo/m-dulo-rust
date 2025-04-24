@@ -114,7 +114,14 @@ pub async fn editar_usuario(
         Ok(_) => {
             db.insert(new_user.login.clone(), new_user.clone());
             println!("Usuário editado com sucesso!");
-            process_user_data(new_user).await.map_err(|_| EditarError::ProcessarDadosUsuario)?;
+            // Só chama process_user_data se tipo ou uuid mudaram (ou seja, houve remoção e precisa adicionar de novo)
+            let tipo_antigo = existing_user.as_ref().unwrap().tipo.as_str();
+            let uuid_antigo = existing_user.as_ref().unwrap().uuid.as_ref();
+            let tipo_novo = edit_req.tipo.as_str();
+            let uuid_novo = edit_req.uuid.as_ref();
+            if uuid_antigo != uuid_novo || tipo_antigo != tipo_novo {
+                process_user_data(new_user).await.map_err(|_| EditarError::ProcessarDadosUsuario)?;
+            }
             Ok(())
         }
         Err(e) => Err(EditarError::AtualizarUsuarioBanco(e.to_string()))
