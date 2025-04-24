@@ -5,7 +5,7 @@
 # ===============================
 APP_DIR="/opt/myapp"
 DEPENDENCIES=("unzip")
-VERSION="1.0.2"
+VERSION="1.0.3"
 AUTHENTICATION_API_KEY=$(openssl rand -hex 16)
 FILE_URL="https://github.com/sshturbo/m-dulo-rust/releases/download/$VERSION"
 ARCH=$(uname -m)
