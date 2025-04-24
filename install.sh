@@ -69,6 +69,12 @@ run_with_spinner() {
     fi
 }
 
+
+print_centered "Modulos do painel Web Pro"
+print_centered "Versão: $VERSION"
+print_centered "Arquitetura: $ARCH"
+
+
 install_if_missing() {
     local package=$1
     if ! command -v $package &>/dev/null; then
