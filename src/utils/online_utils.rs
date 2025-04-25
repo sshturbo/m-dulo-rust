@@ -3,41 +3,37 @@ use std::io::Error;
 
 #[allow(dead_code)]
 pub fn get_users() -> Result<String, Error> {
-    // Executa o comando para obter os processos relacionados a "priv" em estado "Ss"
-    let output = Command::new("sh")
-        .arg("-c")
-        .arg("ps aux | grep priv | grep Ss | awk -F 'sshd: ' '{print $2}' | awk -F ' ' '{print $1}'")
-        .output()?;
-
-    let output_str = String::from_utf8_lossy(&output.stdout);
     let mut user_list = Vec::new();
 
-    // Processa a saída do comando para filtrar os usuários
-    for username in output_str.lines() {
-        // Excluir usuários "root" e "unknown"
-        if username != "root" && username != "unknown" {
-            user_list.push(username.to_string());
+    // Busca usuários SSH
+    let ssh_output = Command::new("sh")
+        .arg("-c")
+        .arg("ps aux | grep -v grep | grep 'sshd:' | grep -v root | awk '{print $1}'")
+        .output()?;
+
+    let ssh_users = String::from_utf8_lossy(&ssh_output.stdout);
+    for user in ssh_users.lines() {
+        let user = user.trim();
+        if !user.is_empty() && user != "root" && user != "unknown" && !user.contains("sshd") {
+            user_list.push(user.to_string());
         }
     }
 
-    // Verifica e processa o arquivo do OpenVPN para adicionar usuários
-    if let Ok(openvpn_output) = Command::new("grep")
-        .arg("-Eo")
-        .arg("^[a-zA-Z0-9_-]+,[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+:[0-9]+")
-        .arg("/etc/openvpn/openvpn-status.log")
+    // Busca usuários OpenVPN
+    if let Ok(openvpn_output) = Command::new("sh")
+        .arg("-c")
+        .arg("cat /etc/openvpn/openvpn-status.log 2>/dev/null | grep -E '^[^,]+,' | cut -d',' -f1")
         .output()
     {
-        let openvpn_output_str = String::from_utf8_lossy(&openvpn_output.stdout);
-        for user in openvpn_output_str.lines() {
+        let openvpn_users = String::from_utf8_lossy(&openvpn_output.stdout);
+        for user in openvpn_users.lines() {
             let user = user.trim();
-            // Adiciona somente usuários válidos e que não sejam "root" ou "unknown"
-            if !user.contains("-c") && !user.is_empty() && user != "root" && user != "unknown" {
+            if !user.is_empty() && user != "root" && user != "unknown" && !user_list.contains(&user.to_string()) {
                 user_list.push(user.to_string());
             }
         }
     }
 
-    // Retorna a lista de usuários como uma string separada por vírgulas
     Ok(user_list.join(","))
 }
 

@@ -105,23 +105,30 @@ async fn handle_online_socket(
     info!("Cliente conectado ao WebSocket /online");
 
     loop {
-        let online_users = match monitor_users(pool.clone()).await {
-            Ok(users) => users,
-            Err(e) => json!({"error": e.to_string()}),
-        };
-
-        if let Err(e) = socket.send(Message::Text(online_users.to_string())).await {
-            if e.to_string().contains("Broken pipe") {
-                info!("Cliente desconectado do WebSocket /online");
-                break;
+        match monitor_users(pool.clone()).await {
+            Ok(users) => {
+                if let Err(e) = socket.send(Message::Text(users.to_string())).await {
+                    if e.to_string().contains("Broken pipe") || e.to_string().contains("Connection reset by peer") {
+                        info!("Cliente desconectado do WebSocket /online");
+                        break;
+                    }
+                    info!("Erro ao enviar mensagem: {}", e);
+                    break;
+                }
+            },
+            Err(e) => {
+                info!("Erro ao monitorar usuários: {}", e);
+                if let Err(e) = socket.send(Message::Text(json!({"error": "Erro ao monitorar usuários"}).to_string())).await {
+                    info!("Erro ao enviar mensagem de erro: {}", e);
+                    break;
+                }
             }
-            info!("Erro ao enviar mensagem: {}", e);
-            break;
         }
+        
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 
-    info!("Cliente desconectado do WebSocket /online");
+    info!("Conexão WebSocket /online encerrada");
 }
 
 async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result<String, WsHandlerError> {

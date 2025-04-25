@@ -10,6 +10,11 @@ pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
     loop {
         let start_time = std::time::Instant::now();
 
+        // Primeiro, marca todos os usuários como Off
+        sqlx::query("UPDATE online SET status = 'Off'")
+            .execute(&pool)
+            .await?;
+
         let online_users: Vec<String> = sqlx::query("SELECT login FROM online")
             .fetch_all(&pool)
             .await?
@@ -28,6 +33,7 @@ pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
                 *user_count.entry(user.to_string()).or_insert(0) += 1;
             }
 
+            // Remove usuários que não estão mais online
             for online_user in &online_users {
                 if !user_list.contains(&online_user.as_str()) {
                     sqlx::query("DELETE FROM online WHERE login = ?")
@@ -69,7 +75,7 @@ pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
                             .await {
                                 Ok(Some(online_row)) => {
                                     if online_row.get::<i64, _>("limite") != row.get::<i64, _>("limite") {
-                                        sqlx::query("UPDATE online SET limite = ? WHERE login = ?")
+                                        sqlx::query("UPDATE online SET limite = ?, status = 'On' WHERE login = ?")
                                             .bind(row.get::<i64, _>("limite"))
                                             .bind(user)
                                             .execute(&pool)
@@ -78,7 +84,7 @@ pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
 
                                     if let Some(online_users) = online_row.get::<Option<i64>, _>("usuarios_online") {
                                         if online_users != *count {
-                                            sqlx::query("UPDATE online SET usuarios_online = ? WHERE login = ?")
+                                            sqlx::query("UPDATE online SET usuarios_online = ?, status = 'On' WHERE login = ?")
                                                 .bind(*count)
                                                 .bind(user)
                                                 .execute(&pool)
@@ -110,6 +116,7 @@ pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
                         }
                     },
                     Ok(None) => {
+                        // Usuario não existe no banco de dados
                     },
                     Err(e) => {
                         error!("Erro ao executar query SELECT para usuário '{}': {}", user, e);
@@ -121,7 +128,6 @@ pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
         }
 
         let elapsed_time = start_time.elapsed();
-
         let sleep_duration = if elapsed_time < Duration::from_secs(1) {
             Duration::from_secs(1) - elapsed_time
         } else {
