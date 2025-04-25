@@ -21,7 +21,7 @@ use crate::routes::online_monitor::monitor_users;
 use axum::http::StatusCode;
 use crate::routes::criar::{Database, CriarError};
 use crate::routes::criar::criar_usuario;
-use log::info;
+use log::{info, error};
 use std::time::Duration;
 use serde_json::json;
 
@@ -70,6 +70,7 @@ impl IntoResponse for CriarError {
 pub async fn websocket_handler(
     ws: WebSocketUpgrade,
     pool: axum::extract::State<Pool<Sqlite>>,
+
 ) -> impl IntoResponse {
     let db: Database = Arc::new(Mutex::new(HashMap::new()));
     ws.on_upgrade(move |socket| handle_socket(socket, db, pool.0))
@@ -78,6 +79,7 @@ pub async fn websocket_handler(
 pub async fn websocket_online_handler(
     ws: WebSocketUpgrade,
     pool: axum::extract::State<Pool<Sqlite>>,
+
 ) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_online_socket(socket, pool.0))
 }
@@ -103,29 +105,71 @@ async fn handle_online_socket(
     pool: Pool<Sqlite>,
 ) {
     info!("Cliente conectado ao WebSocket /online");
-
+    
+    let mut interval = tokio::time::interval(Duration::from_secs(2));  // Atualização a cada 2 segundos
+    let mut last_update = String::new();
+    
     loop {
-        match monitor_users(pool.clone()).await {
-            Ok(users) => {
-                if let Err(e) = socket.send(Message::Text(users.to_string())).await {
-                    if e.to_string().contains("Broken pipe") || e.to_string().contains("Connection reset by peer") {
-                        info!("Cliente desconectado do WebSocket /online");
+        tokio::select! {
+            _ = interval.tick() => {
+                match monitor_users(pool.clone()).await {
+                    Ok(users) => {
+                        let current_update = users.to_string();
+                        // Só envia se houver mudança no estado dos usuários online
+                        if current_update != last_update {
+                            match socket.send(Message::Text(current_update.clone())).await {
+                                Ok(_) => {
+                                    last_update = current_update;
+                                },
+                                Err(e) => {
+                                    if e.to_string().contains("Broken pipe") || 
+                                       e.to_string().contains("Connection reset by peer") {
+                                        info!("Cliente desconectado do WebSocket /online");
+                                        break;
+                                    }
+                                    error!("Erro ao enviar mensagem: {}", e);
+                                    break;
+                                }
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        error!("Erro ao monitorar usuários: {}", e);
+                        if let Err(send_err) = socket
+                            .send(Message::Text(json!({
+                                "status": "error",
+                                "message": "Erro ao monitorar usuários",
+                                "details": e.to_string()
+                            }).to_string()))
+                            .await 
+                        {
+                            error!("Erro ao enviar mensagem de erro: {}", send_err);
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            Some(msg) = socket.recv() => {
+                match msg {
+                    Ok(Message::Close(_)) => {
+                        info!("Cliente solicitou fechamento da conexão WebSocket /online");
                         break;
                     }
-                    info!("Erro ao enviar mensagem: {}", e);
-                    break;
-                }
-            },
-            Err(e) => {
-                info!("Erro ao monitorar usuários: {}", e);
-                if let Err(e) = socket.send(Message::Text(json!({"error": "Erro ao monitorar usuários"}).to_string())).await {
-                    info!("Erro ao enviar mensagem de erro: {}", e);
-                    break;
+                    Ok(Message::Ping(data)) => {
+                        if let Err(e) = socket.send(Message::Pong(data)).await {
+                            error!("Erro ao responder ping: {}", e);
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        error!("Erro ao receber mensagem do cliente: {}", e);
+                        break;
+                    }
+                    _ => {} // Ignora outros tipos de mensagem
                 }
             }
         }
-        
-        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 
     info!("Conexão WebSocket /online encerrada");
