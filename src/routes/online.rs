@@ -50,35 +50,34 @@ pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
                     continue;
                 }
 
-                match sqlx::query(
-                    "SELECT id, login, dias, limite FROM users WHERE login = ?"
+                match sqlx::query_as::<_, (i64, String, i64, i64, i32)>(
+                    "SELECT byid, login, dias, limite, byid FROM users WHERE login = ?"
                 )
                 .bind(user)
                 .fetch_optional(&pool)
                 .await
                 {
-                    Ok(Some(row)) => {
-                        let expiry_date = chrono::Local::now() + chrono::Duration::days(row.get::<i64, _>("dias"));
+                    Ok(Some((id, login, dias, limite, byid))) => {
+                        let expiry_date = chrono::Local::now() + chrono::Duration::days(dias);
 
                         if current_date > expiry_date.naive_local() {
-                            execute_command("pkill", &["-u", &user]).unwrap();
-                            execute_command("userdel", &[&user]).unwrap();
+                            execute_command("pkill", &["-u", &login]).unwrap();
+                            execute_command("userdel", &[&login]).unwrap();
                             sqlx::query("UPDATE users SET suspenso = 'sim' WHERE login = ?")
-                                .bind(user)
+                                .bind(&login)
                                 .execute(&pool)
                                 .await?;
                             continue;
                         }
 
-                        match sqlx::query(
+                        match sqlx::query_as::<_, (i64, i64)>(
                             "SELECT usuarios_online, limite FROM online WHERE login = ?"
                         )
-                        .bind(user)
+                        .bind(&login)
                         .fetch_optional(&pool)
                         .await {
-                            Ok(Some(online_row)) => {
-                                if online_row.get::<i64, _>("limite") != row.get::<i64, _>("limite") 
-                                   || online_row.get::<i64, _>("usuarios_online") != *count {
+                            Ok(Some((usuarios_online, limite_atual))) => {
+                                if limite_atual != limite || usuarios_online != *count {
                                     sqlx::query(
                                         "UPDATE online SET 
                                         limite = ?, 
@@ -86,15 +85,15 @@ pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
                                         status = 'On'
                                         WHERE login = ?"
                                     )
-                                    .bind(row.get::<i64, _>("limite"))
+                                    .bind(limite)
                                     .bind(*count)
-                                    .bind(user)
+                                    .bind(&login)
                                     .execute(&pool)
                                     .await?;
                                 }
 
-                                if online_row.get::<i64, _>("usuarios_online") > online_row.get::<i64, _>("limite") {
-                                    execute_command("pkill", &["-u", &user]).unwrap();
+                                if usuarios_online > limite_atual {
+                                    execute_command("pkill", &["-u", &login]).unwrap();
                                 }
                             },
                             Ok(None) => {
@@ -102,11 +101,11 @@ pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
                                     "INSERT INTO online (login, limite, usuarios_online, inicio_sessao, status, byid)
                                      VALUES (?, ?, ?, ?, 'On', ?)"
                                 )
-                                .bind(user)
-                                .bind(row.get::<i64, _>("limite"))
+                                .bind(&login)
+                                .bind(limite)
                                 .bind(*count)
                                 .bind(current_date.format("%d/%m/%Y %H:%M:%S").to_string())
-                                .bind(row.get::<i64, _>("id"))
+                                .bind(byid)  // Usando o byid do usuário
                                 .execute(&pool)
                                 .await?;
                             },

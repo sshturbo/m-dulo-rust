@@ -16,7 +16,7 @@ struct OnlineUser {
 
 pub async fn monitor_users(pool: Pool<Sqlite>) -> Result<serde_json::Value, Error> {
     let rows = sqlx::query_as::<_, OnlineUser>(
-        "SELECT o.login, o.limite, o.inicio_sessao, o.usuarios_online, o.status, u.dono, u.id as byid
+        "SELECT o.login, o.limite, o.inicio_sessao, o.usuarios_online, o.status, u.dono, u.byid
          FROM online o
          JOIN users u ON o.login = u.login
          WHERE o.status = 'On' AND o.usuarios_online > 0

@@ -33,7 +33,8 @@ pub async fn initialize_db() -> Result<Pool<Sqlite>, sqlx::Error> {
             uuid TEXT,
             tipo TEXT NOT NULL DEFAULT 'v2ray',
             suspenso TEXT DEFAULT 'não',
-            dono TEXT DEFAULT 'admin'
+            dono TEXT DEFAULT 'admin',
+            byid INTEGER NOT NULL
         )",
     )
     .execute(&pool)
@@ -47,8 +48,7 @@ pub async fn initialize_db() -> Result<Pool<Sqlite>, sqlx::Error> {
             limite INTEGER NOT NULL,
             usuarios_online INTEGER DEFAULT 0,
             inicio_sessao TEXT NOT NULL,
-            status TEXT DEFAULT 'On',
-            FOREIGN KEY(byid) REFERENCES users(id)
+            status TEXT DEFAULT 'On'
         )",
     )
     .execute(&pool)
