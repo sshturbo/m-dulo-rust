@@ -387,7 +387,7 @@ async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result
             });
 
             result.map_err(WsHandlerError::SincronizarUsuarios)?;
-            Ok("Usuários sincronizados com sucesso!".to_string())
+            Ok("Sincronização iniciada com sucesso, em segundo plano!".to_string())
         },
         "EDITAR" => {
             let edit_req: EditRequest = serde_json::from_str(dados)
