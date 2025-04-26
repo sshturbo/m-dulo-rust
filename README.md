@@ -8,34 +8,39 @@
 
 ## Instalação rápida com o binário gerado
 
-```sh
-wget -qO- https://raw.githubusercontent.com/sshturbo/m-dulo-rust/refs/heads/master/install.sh | sudo bash -s d6dbaa87ceda172a41971ad3796056d4
-```
+    ```
+    wget -qO- https://raw.githubusercontent.com/sshturbo/m-dulo-rust/refs/heads/master/install.sh | sudo bash -s d6dbaa87ceda172a41971ad3796056d4
+    ```
     
 ## Como executar
 
 1. Clone o repositório:
+
     ```sh
     git clone https://github.com/sshturbo/m-dulo-rust.git
     cd m-dulo-rust
     ```
 
 2. Copie o arquivo `.env.example` para `.env` e configure o token:
+
     ```sh
     cp .env.example .env
     ```
 
 3. Gere um token e adicione ao arquivo `.env`:
+
     ```sh
     echo "API_TOKEN=$(openssl rand -hex 16)" >> .env
     ```
 
 4. Compile o projeto:
+
     ```sh
     cargo build
     ```
 
 5. Execute o projeto:
+
     ```
     cargo run
     ```
@@ -48,6 +53,7 @@ wget -qO- https://raw.githubusercontent.com/sshturbo/m-dulo-rust/refs/heads/mast
 - **Método:** WebSocket
 - **Descrição:** Esta rota recebe um usuário em json e cria um novo usuário. O uuid do v2ray pode ser passado ou ser null.
 - **Exemplo de uso:**
+
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001');
     socket.onopen = () => {
@@ -70,6 +76,7 @@ wget -qO- https://raw.githubusercontent.com/sshturbo/m-dulo-rust/refs/heads/mast
 - **Método:** WebSocket
 - **Descrição:** Esta rota recebe um usuário em json e remove um usuário por vez. O uuid do v2ray pode ser passado ou ser null.
 - **Exemplo de uso:**
+
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001');
     socket.onopen = () => {
@@ -83,6 +90,7 @@ wget -qO- https://raw.githubusercontent.com/sshturbo/m-dulo-rust/refs/heads/mast
 - **Método:** WebSocket
 - **Descrição:** Essa rota recebe uma lista de usuários em json e remove todos os usuários de uma vez. O uuid do v2ray pode ser passado ou ser null.
 - **Exemplo de uso:**
+
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001');
     socket.onopen = () => {
@@ -96,6 +104,7 @@ wget -qO- https://raw.githubusercontent.com/sshturbo/m-dulo-rust/refs/heads/mast
 - **Método:** WebSocket
 - **Descrição:** Esta rota recebe uma lista de usuários em json e sincroniza todos os usuários de uma vez. Se o usuário já existir, ele é excluído e adicionado novamente. O uuid do v2ray pode ser passado ou ser null.
 - **Exemplo de uso:**
+
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001');
     socket.onopen = () => {
@@ -128,6 +137,7 @@ wget -qO- https://raw.githubusercontent.com/sshturbo/m-dulo-rust/refs/heads/mast
 - **Método:** WebSocket
 - **Descrição:** Esta rota recebe um usuário em json e edita as informações do usuário existente. O uuid do v2ray pode ser passado ou ser null. Os campos `dono` e `byid` são mantidos automaticamente do usuário original, não sendo necessário enviá-los na requisição.
 - **Exemplo de uso:**
+
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001');
     socket.onopen = () => {
@@ -151,6 +161,7 @@ wget -qO- https://raw.githubusercontent.com/sshturbo/m-dulo-rust/refs/heads/mast
 - **Descrição:** Esta rota se conecta ao WebSocket `ws://127.0.0.1:9001/online` e começa a enviar uma lista de usuários online em JSON com o login, limite, conexões simultâneas, tempo online, status e informações adicionais. Se não houver nenhum usuário online, retorna a mensagem em JSON `{"message":"Nenhum usuário online no momento."}`.
 
 - **Exemplo de uso:**
+
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001/online');
     socket.onopen = () => {
@@ -162,6 +173,7 @@ wget -qO- https://raw.githubusercontent.com/sshturbo/m-dulo-rust/refs/heads/mast
     ```
 
 - **Exemplo de resposta:**
+
     ```json
     {
         "status": "success",
@@ -179,7 +191,7 @@ wget -qO- https://raw.githubusercontent.com/sshturbo/m-dulo-rust/refs/heads/mast
         ]
     }
     ```
-    
+
 ## Observações sobre os campos
 
 - O campo `"tipo"` (com valor `"v2ray"` ou `"xray"`) é **obrigatório** nas rotas de criação, edição e sincronização de usuários via WebSocket:
@@ -191,20 +203,25 @@ wget -qO- https://raw.githubusercontent.com/sshturbo/m-dulo-rust/refs/heads/mast
 - O campo `"byid"` é um identificador único do usuário no banco de dados
 - O campo `"conexoes_simultaneas"` indica quantas conexões ativas o usuário tem no momento
 - **Não é necessário enviar os campos `tipo`, `dono` e `byid` nas rotas de exclusão** (`EXCLUIR`, `EXCLUIR_GLOBAL`), pois o backend busca essas informações diretamente no banco de dados.
-    
+
 ## Build para aarch64 usando cross (recomendado para ARM 64 bits)
 
 Para compilar o projeto para ARM 64 bits (aarch64) de forma fácil e portátil, use a ferramenta [cross](https://github.com/cross-rs/cross):
 
 1. Instale o cross (apenas uma vez):
+
    ```bash
    cargo install cross
    ```
+
 2. Compile para aarch64 (binário estático, compatível com a maioria dos Linux ARM 64 bits):
+
    ```bash
    cross build --release --target aarch64-unknown-linux-musl
    ```
+
 3. O binário gerado estará em:
+
    ```
    target/aarch64-unknown-linux-musl/release/
    ```
@@ -222,6 +239,7 @@ cross build --release --target x86_64-unknown-linux-musl
 ```
 
 O binário gerado estará em:
+
 ```
 target/x86_64-unknown-linux-musl/release/
 ```
