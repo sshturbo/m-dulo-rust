@@ -9,4 +9,5 @@ pub struct User {
     pub limite: i32,
     pub uuid: Option<String>,
     pub tipo: String,
+    pub dono: String,
 }

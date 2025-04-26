@@ -60,7 +60,7 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
     // Adicionar ou atualizar todos os usuários recebidos
     for user in &usuarios {
         sqlx::query(
-            "INSERT OR REPLACE INTO users (login, senha, dias, limite, uuid, tipo) VALUES (?, ?, ?, ?, ?, ?)"
+            "INSERT OR REPLACE INTO users (login, senha, dias, limite, uuid, tipo, dono) VALUES (?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(&user.login)
         .bind(&user.senha)
@@ -68,6 +68,7 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
         .bind(user.limite as i64)
         .bind(&user.uuid)
         .bind(&user.tipo)
+        .bind(&user.dono)
         .execute(pool)
         .await
         .map_err(|e| SyncError::InserirUsuarioBanco(e.to_string()))?;
@@ -86,7 +87,7 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
                 let mut unique_uuids = std::collections::HashSet::new();
                 let mut new_clients = Vec::new();
                 let mut all_valid = true;
-                for user in usuarios.iter().rev() { // .rev() para manter o último caso haja duplicidade
+                for user in usuarios.iter().rev() { 
                     if user.tipo == "xray" {
                         if let Some(uuid) = &user.uuid {
                             if !uuid.is_empty()

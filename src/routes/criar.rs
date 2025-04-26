@@ -34,7 +34,7 @@ pub async fn criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Res
     }
 
     sqlx::query(
-        "INSERT INTO users (login, senha, dias, limite, uuid, tipo) VALUES (?, ?, ?, ?, ?, ?)" 
+        "INSERT INTO users (login, senha, dias, limite, uuid, tipo, dono) VALUES (?, ?, ?, ?, ?, ?, ?)" 
     )
     .bind(&user.login)
     .bind(&user.senha)
@@ -42,6 +42,7 @@ pub async fn criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Res
     .bind(user.limite as i64)
     .bind(&user.uuid)
     .bind(&user.tipo)
+    .bind(&user.dono)
     .execute(pool)
     .await
     .map_err(|e| CriarError::InserirUsuario(e.to_string()))?;

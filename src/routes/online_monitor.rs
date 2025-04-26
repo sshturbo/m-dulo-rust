@@ -9,15 +9,17 @@ struct OnlineUser {
     limite: i64,
     inicio_sessao: String,
     usuarios_online: i64,
-    status: String
+    status: String,
+    dono: String
 }
 
 pub async fn monitor_users(pool: Pool<Sqlite>) -> Result<serde_json::Value, Error> {
     let rows = sqlx::query_as::<_, OnlineUser>(
-        "SELECT login, limite, inicio_sessao, usuarios_online, status 
-         FROM online 
-         WHERE status = 'On' AND usuarios_online > 0
-         ORDER BY login ASC"
+        "SELECT o.login, o.limite, o.inicio_sessao, o.usuarios_online, o.status, u.dono 
+         FROM online o
+         JOIN users u ON o.login = u.login
+         WHERE o.status = 'On' AND o.usuarios_online > 0
+         ORDER BY o.login ASC"
     )
     .fetch_all(&pool)
     .await?;
@@ -57,7 +59,8 @@ pub async fn monitor_users(pool: Pool<Sqlite>) -> Result<serde_json::Value, Erro
                 minutes,
                 seconds
             ),
-            "status": row.status
+            "status": row.status,
+            "dono": row.dono
         }));
     }
 

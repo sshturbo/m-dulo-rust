@@ -32,7 +32,8 @@ pub async fn initialize_db() -> Result<Pool<Sqlite>, sqlx::Error> {
             limite INTEGER NOT NULL,
             uuid TEXT,
             tipo TEXT NOT NULL DEFAULT 'v2ray',
-            suspenso TEXT DEFAULT 'não'
+            suspenso TEXT DEFAULT 'não',
+            dono TEXT DEFAULT 'admin'
         )",
     )
     .execute(&pool)
