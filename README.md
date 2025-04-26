@@ -126,11 +126,12 @@ wget -qO- https://raw.githubusercontent.com/sshturbo/m-dulo-rust/refs/heads/mast
 
 - **Rota:** `EDITAR`
 - **Método:** WebSocket
-- **Descrição:** Esta rota recebe um usuário em json e edita as informações do usuário existente. O uuid do v2ray pode ser passado ou ser null. Os campos `dono` e `byid` são mantidos do usuário original.
+- **Descrição:** Esta rota recebe um usuário em json e edita as informações do usuário existente. O uuid do v2ray pode ser passado ou ser null. Os campos `dono` e `byid` são mantidos automaticamente do usuário original, não sendo necessário enviá-los na requisição.
 - **Exemplo de uso:**
     ```javascript
     const socket = new WebSocket('ws://127.0.0.1:9001');
     socket.onopen = () => {
+        // Observe que dono e byid não precisam ser enviados na edição
         socket.send('seu_token_aqui:EDITAR:{
             "login_antigo": "teste2",
             "login_novo": "teste3",
