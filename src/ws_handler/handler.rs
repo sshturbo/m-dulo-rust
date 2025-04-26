@@ -106,7 +106,31 @@ async fn handle_online_socket(
 ) {
     info!("Cliente conectado ao WebSocket /online");
     
-    let mut interval = tokio::time::interval(Duration::from_secs(2));  // Atualização a cada 2 segundos
+    // Aguarda a mensagem de autenticação
+    if let Some(Ok(Message::Text(text))) = socket.recv().await {
+        let token = text.trim();
+        let expected_token = &Config::get().api_token;
+        
+        if token != expected_token {
+            let _ = socket.send(Message::Text(json!({
+                "status": "error",
+                "message": "Token inválido"
+            }).to_string())).await;
+            info!("Tentativa de conexão com token inválido");
+            return;
+        }
+        
+        info!("Cliente autenticado com sucesso no WebSocket /online");
+    } else {
+        let _ = socket.send(Message::Text(json!({
+            "status": "error",
+            "message": "Token não fornecido"
+        }).to_string())).await;
+        info!("Tentativa de conexão sem token");
+        return;
+    }
+    
+    let mut interval = tokio::time::interval(Duration::from_secs(2));
     let mut last_update = String::new();
     
     loop {
@@ -115,7 +139,6 @@ async fn handle_online_socket(
                 match monitor_users(pool.clone()).await {
                     Ok(users) => {
                         let current_update = users.to_string();
-                        // Só envia se houver mudança no estado dos usuários online
                         if current_update != last_update {
                             match socket.send(Message::Text(current_update.clone())).await {
                                 Ok(_) => {
