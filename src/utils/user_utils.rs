@@ -33,10 +33,13 @@ pub async fn process_user_data(user: User) -> Result<(), String> {
 
 pub fn adicionar_usuario_sistema(username: &str, password: &str, dias: u32, sshlimiter: u32) -> Result<(), String> {
     use std::io::Write as IoWrite;
+    use std::process::Command;
 
     // Verificar se o usuário já existe
     if Command::new("id").arg(username).output().map_err(|_| "Falha ao verificar usuário".to_string())?.status.success() {
-        return Ok(());
+        // Se existe, remove o usuário
+        let _ = Command::new("pkill").args(["-u", username]).status();
+        let _ = Command::new("userdel").arg(username).status();
     }
 
     let final_date = (Utc::now() + Duration::days(dias as i64)).format("%Y-%m-%d").to_string();
