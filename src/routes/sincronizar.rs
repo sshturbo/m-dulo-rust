@@ -10,6 +10,9 @@ use std::fs;
 use serde_json::Value;
 use crate::utils::restart_v2ray::reiniciar_v2ray;
 use crate::utils::restart_xray::reiniciar_xray;
+use futures::future::join_all;
+
+const BATCH_SIZE: usize = 50; // Tamanho do lote para processamento
 
 pub type Database = Arc<Mutex<HashMap<String, User>>>;
 
@@ -21,7 +24,24 @@ pub enum SyncError {
     InserirUsuarioBanco(String)
 }
 
-pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: Vec<User>) -> Result<(), SyncError> {
+// Função principal que recebe a lista e inicia o processamento em background
+pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: Vec<User>) -> Result<String, SyncError> {
+    let pool = pool.clone();
+    let usuarios_len = usuarios.len();
+    
+    // Inicia o processamento em background
+    tokio::spawn(async move {
+        if let Err(e) = processar_usuarios_em_lotes(db, &pool, usuarios).await {
+            eprintln!("Erro no processamento em background: {}", e);
+        }
+    });
+
+    // Retorna resposta imediata
+    Ok(format!("Iniciado processamento de {} usuários em background", usuarios_len))
+}
+
+// Função que processa os usuários em lotes
+async fn processar_usuarios_em_lotes(db: Database, pool: &Pool<Sqlite>, usuarios: Vec<User>) -> Result<(), SyncError> {
     let mut db = db.lock().await;
 
     // Buscar todos os usuários atuais do banco
@@ -30,65 +50,144 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
         .await
         .map_err(|e| SyncError::VerificarUsuario(e.to_string()))?;
 
-    // Descobrir quais usuários devem ser removidos (não estão na lista nova)
-    for user_atual in &usuarios_atuais {
-        if !usuarios.iter().any(|u| u.login == user_atual.login) {
-            // Remover do sistema e do serviço correto
+    // Processa remoções em paralelo com chunks
+    let chunks_remocao: Vec<_> = usuarios_atuais
+        .iter()
+        .filter(|user_atual| !usuarios.iter().any(|u| u.login == user_atual.login))
+        .collect::<Vec<_>>()
+        .chunks(BATCH_SIZE)
+        .map(|chunk| chunk.to_vec())
+        .collect();
+
+    for chunk in chunks_remocao {
+        let mut tasks = Vec::new();
+        let mut logins_to_delete = Vec::new();
+
+        // Processa remoções em paralelo
+        for user_atual in chunk {
             let uuid = user_atual.uuid.clone();
-            match user_atual.tipo.as_str() {
-                "xray" => {
-                    if let Some(uuid) = uuid {
-                        remover_uuids_xray(&vec![uuid]).await;
-                    }
-                },
-                _ => {
-                    if let Some(uuid) = uuid {
-                        remover_uuid_v2ray(&uuid).await;
+            let login = user_atual.login.clone();
+            let tipo = user_atual.tipo.clone();
+            
+            tasks.push(tokio::spawn(async move {
+                match tipo.as_str() {
+                    "xray" => {
+                        if let Some(uuid) = uuid {
+                            remover_uuids_xray(&vec![uuid]).await;
+                        }
+                    },
+                    _ => {
+                        if let Some(uuid) = uuid {
+                            remover_uuid_v2ray(&uuid).await;
+                        }
                     }
                 }
+                let _ = Command::new("pkill").args(["-u", &login]).status();
+                let _ = Command::new("userdel").arg(&login).status();
+                login
+            }));
+            logins_to_delete.push(user_atual.login.clone());
+        }
+
+        // Aguarda todas as remoções do lote
+        join_all(tasks).await;
+
+        // Remove do banco em lote
+        if !logins_to_delete.is_empty() {
+            let placeholders = std::iter::repeat("?")
+                .take(logins_to_delete.len())
+                .collect::<Vec<_>>()
+                .join(",");
+            
+            let query = format!("DELETE FROM users WHERE login IN ({})", placeholders);
+            let mut query = sqlx::query(&query);
+            for login in &logins_to_delete {
+                query = query.bind(login);
             }
-            let _ = Command::new("pkill").args(["-u", &user_atual.login]).status();
-            let _ = Command::new("userdel").arg(&user_atual.login).status();
-            sqlx::query("DELETE FROM users WHERE login = ?")
-                .bind(&user_atual.login)
-                .execute(pool)
-                .await
-                .ok();
+            query.execute(pool).await.ok();
         }
     }
 
-    // Adicionar ou atualizar todos os usuários recebidos
-    for user in &usuarios {
-        sqlx::query(
-            "INSERT OR REPLACE INTO users (login, senha, dias, limite, uuid, tipo, dono, byid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-        )
-        .bind(&user.login)
-        .bind(&user.senha)
-        .bind(user.dias as i64)
-        .bind(user.limite as i64)
-        .bind(&user.uuid)
-        .bind(&user.tipo)
-        .bind(&user.dono)
-        .bind(user.byid as i64)
-        .execute(pool)
-        .await
-        .map_err(|e| SyncError::InserirUsuarioBanco(e.to_string()))?;
-        db.insert(user.login.clone(), user.clone());
-        // Garante que o usuário do sistema operacional é criado/recriado
-        let _ = adicionar_usuario_sistema(&user.login, &user.senha, user.dias as u32, user.limite as u32);
+    // Processa adições/atualizações em paralelo com chunks
+    let chunks_adicao: Vec<_> = usuarios
+        .chunks(BATCH_SIZE)
+        .map(|chunk| chunk.to_vec())
+        .collect();
+
+    for chunk in chunks_adicao {
+        let mut tasks = Vec::new();
+        let mut db_tasks = Vec::new();
+
+        // Processa criação de usuários em paralelo
+        for user in &chunk {
+            let user_clone = user.clone();
+            tasks.push(tokio::spawn(async move {
+                adicionar_usuario_sistema(
+                    &user_clone.login,
+                    &user_clone.senha,
+                    user_clone.dias as u32,
+                    user_clone.limite as u32
+                )
+            }));
+
+            // Prepara inserções no banco
+            db_tasks.push(
+                sqlx::query(
+                    "INSERT OR REPLACE INTO users (login, senha, dias, limite, uuid, tipo, dono, byid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                )
+                .bind(&user.login)
+                .bind(&user.senha)
+                .bind(user.dias as i64)
+                .bind(user.limite as i64)
+                .bind(&user.uuid)
+                .bind(&user.tipo)
+                .bind(&user.dono)
+                .bind(user.byid as i64)
+                .execute(pool)
+            );
+
+            // Atualiza o cache em memória
+            db.insert(user.login.clone(), user.clone());
+        }
+
+        // Executa em paralelo a criação dos usuários e inserções no banco
+        let (system_results, db_results) = tokio::join!(
+            join_all(tasks),
+            join_all(db_tasks)
+        );
+
+        // Verifica erros nas operações do banco
+        for result in db_results {
+            if let Err(e) = result {
+                eprintln!("Erro ao inserir no banco: {}", e);
+            }
+        }
+
+        // Pequeno delay entre lotes para não sobrecarregar
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
     }
 
-    // Atualizar config.json do Xray em lote
+    // Atualiza as configurações do Xray e V2Ray em paralelo
+    let (xray_result, v2ray_result) = tokio::join!(
+        atualizar_configs_xray(&usuarios),
+        atualizar_configs_v2ray(&usuarios)
+    );
+
+    Ok(())
+}
+
+// Função auxiliar para atualizar configurações do Xray
+async fn atualizar_configs_xray(usuarios: &[User]) {
     let config_path_xray = "/usr/local/etc/xray/config.json";
     if std::path::Path::new(config_path_xray).exists() {
         if let Ok(content) = fs::read_to_string(config_path_xray) {
             if let Ok(mut json) = serde_json::from_str::<Value>(&content) {
-                // Deduplicar usuários por login e uuid
                 let mut unique_logins = std::collections::HashSet::new();
                 let mut unique_uuids = std::collections::HashSet::new();
                 let mut new_clients = Vec::new();
                 let mut all_valid = true;
-                for user in usuarios.iter().rev() { 
+
+                for user in usuarios.iter().rev() {
                     if user.tipo == "xray" {
                         if let Some(uuid) = &user.uuid {
                             if !uuid.is_empty()
@@ -106,7 +205,7 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
                         }
                     }
                 }
-                new_clients.reverse();
+
                 if all_valid {
                     let mut updated = false;
                     if let Some(inbounds) = json.get_mut("inbounds") {
@@ -128,14 +227,14 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
                             }
                         }
                     }
-                } else {
-                    eprintln!("Erro: Usuário xray sem uuid válido. Configuração do Xray não foi atualizada.");
                 }
             }
         }
     }
+}
 
-    // Atualizar config.json do V2Ray em lote
+// Função auxiliar para atualizar configurações do V2Ray
+async fn atualizar_configs_v2ray(usuarios: &[User]) {
     let config_path_v2ray = "/etc/v2ray/config.json";
     if std::path::Path::new(config_path_v2ray).exists() {
         if let Ok(content) = fs::read_to_string(config_path_v2ray) {
@@ -146,7 +245,7 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
                             if let Some(clients) = settings.get_mut("clients") {
                                 if let Some(clients_array) = clients.as_array_mut() {
                                     clients_array.clear();
-                                    for user in &usuarios {
+                                    for user in usuarios {
                                         if user.tipo == "v2ray" {
                                             if let Some(uuid) = &user.uuid {
                                                 clients_array.push(serde_json::json!({
@@ -172,5 +271,4 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
             }
         }
     }
-    Ok(())
 }

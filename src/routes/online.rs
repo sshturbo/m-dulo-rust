@@ -4,7 +4,6 @@ use std::time::Duration;
 use tokio::time::sleep;
 use sqlx::Error;
 use log::error;
-use sqlx::Row;
 
 pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
     loop {
@@ -57,7 +56,7 @@ pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
                 .fetch_optional(&pool)
                 .await
                 {
-                    Ok(Some((id, login, dias, limite, byid))) => {
+                    Ok(Some((_id, login, dias, limite, byid))) => {
                         let expiry_date = chrono::Local::now() + chrono::Duration::days(dias);
 
                         if current_date > expiry_date.naive_local() {
@@ -105,7 +104,7 @@ pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
                                 .bind(limite)
                                 .bind(*count)
                                 .bind(current_date.format("%d/%m/%Y %H:%M:%S").to_string())
-                                .bind(byid)  // Usando o byid do usuário
+                                .bind(byid)
                                 .execute(&pool)
                                 .await?;
                             },
