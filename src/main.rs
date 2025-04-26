@@ -65,6 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .route("/", get(websocket_handler))
         .route("/online", get(websocket_online_handler))
+        .route("/sync-status", get(websocket_sync_status_handler))
         .layer(Extension(db)) 
         .with_state(pool.clone()); 
 

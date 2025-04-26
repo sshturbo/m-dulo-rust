@@ -24,6 +24,23 @@ use crate::routes::criar::criar_usuario;
 use log::{info, error};
 use std::time::Duration;
 use serde_json::json;
+use tokio::sync::broadcast;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+// Estrutura para controlar o status da sincronização
+#[derive(Clone, Debug)]
+struct SyncProgress {
+    total: usize,
+    processed: usize,
+    errors: Vec<String>,
+    status: String,
+}
+
+// Canal global para transmitir atualizações de sincronização
+lazy_static::lazy_static! {
+    static ref SYNC_CHANNEL: (broadcast::Sender<SyncProgress>, broadcast::Receiver<SyncProgress>) = broadcast::channel(100);
+    static ref ACTIVE_SYNCS: AtomicUsize = AtomicUsize::new(0);
+}
 
 #[derive(Error, Debug)]
 pub enum WsHandlerError {
@@ -82,6 +99,13 @@ pub async fn websocket_online_handler(
 
 ) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_online_socket(socket, pool.0))
+}
+
+pub async fn websocket_sync_status_handler(
+    ws: WebSocketUpgrade,
+    pool: axum::extract::State<Pool<Sqlite>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_sync_status_socket(socket, pool.0))
 }
 
 async fn handle_socket(
@@ -198,6 +222,96 @@ async fn handle_online_socket(
     info!("Conexão WebSocket /online encerrada");
 }
 
+async fn handle_sync_status_socket(
+    mut socket: WebSocket,
+    pool: Pool<Sqlite>,
+) {
+    info!("Cliente conectado ao WebSocket /sync-status");
+    
+    // Autenticação
+    if let Some(Ok(Message::Text(text))) = socket.recv().await {
+        let token = text.trim();
+        let expected_token = &Config::get().api_token;
+        
+        if token != expected_token {
+            let _ = socket.send(Message::Text(json!({
+                "status": "error",
+                "message": "Token inválido"
+            }).to_string())).await;
+            info!("Tentativa de conexão com token inválido no /sync-status");
+            return;
+        }
+        
+        info!("Cliente autenticado com sucesso no WebSocket /sync-status");
+    } else {
+        let _ = socket.send(Message::Text(json!({
+            "status": "error",
+            "message": "Token não fornecido"
+        }).to_string())).await;
+        info!("Tentativa de conexão sem token no /sync-status");
+        return;
+    }
+
+    let mut rx = SYNC_CHANNEL.0.subscribe();
+    
+    // Envia status inicial
+    let active_syncs = ACTIVE_SYNCS.load(Ordering::Relaxed);
+    let _ = socket.send(Message::Text(json!({
+        "status": "connected",
+        "active_syncs": active_syncs,
+        "message": if active_syncs > 0 { 
+            "Sincronização em andamento" 
+        } else { 
+            "Nenhuma sincronização em andamento" 
+        }
+    }).to_string())).await;
+
+    loop {
+        tokio::select! {
+            Ok(progress) = rx.recv() => {
+                let status_json = json!({
+                    "status": "sync_update",
+                    "total": progress.total,
+                    "processed": progress.processed,
+                    "progress_percentage": if progress.total > 0 {
+                        (progress.processed as f64 / progress.total as f64 * 100.0) as u32
+                    } else {
+                        0
+                    },
+                    "errors": progress.errors,
+                    "state": progress.status
+                });
+
+                if let Err(e) = socket.send(Message::Text(status_json.to_string())).await {
+                    error!("Erro ao enviar atualização de sincronização: {}", e);
+                    break;
+                }
+            }
+            Some(msg) = socket.recv() => {
+                match msg {
+                    Ok(Message::Close(_)) => {
+                        info!("Cliente solicitou fechamento da conexão WebSocket /sync-status");
+                        break;
+                    }
+                    Ok(Message::Ping(data)) => {
+                        if let Err(e) = socket.send(Message::Pong(data)).await {
+                            error!("Erro ao responder ping em /sync-status: {}", e);
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        error!("Erro ao receber mensagem do cliente em /sync-status: {}", e);
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    info!("Conexão WebSocket /sync-status encerrada");
+}
+
 async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result<String, WsHandlerError> {
     let parts: Vec<&str> = text.splitn(3, ':').collect();
     if parts.len() != 3 {
@@ -238,7 +352,41 @@ async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result
             if usuarios.iter().any(|u| u.tipo != "v2ray" && u.tipo != "xray") {
                 return Err(WsHandlerError::DadosUsuarioInvalidos);
             }
-            sincronizar_usuarios(db, pool, usuarios).await.map_err(WsHandlerError::SincronizarUsuarios)?;
+
+            // Incrementa o contador de sincronizações ativas
+            ACTIVE_SYNCS.fetch_add(1, Ordering::SeqCst);
+            
+            // Envia status inicial
+            let _ = SYNC_CHANNEL.0.send(SyncProgress {
+                total: usuarios.len(),
+                processed: 0,
+                errors: Vec::new(),
+                status: "Iniciando sincronização".to_string(),
+            });
+
+            // Processa a sincronização
+            let result = sincronizar_usuarios(db, pool, usuarios.clone()).await;
+
+            // Decrementa o contador de sincronizações ativas
+            ACTIVE_SYNCS.fetch_sub(1, Ordering::SeqCst);
+
+            // Envia status final
+            let _ = SYNC_CHANNEL.0.send(SyncProgress {
+                total: usuarios.len(),
+                processed: usuarios.len(),
+                errors: if let Err(ref e) = result {
+                    vec![e.to_string()]
+                } else {
+                    Vec::new()
+                },
+                status: if result.is_ok() {
+                    "Sincronização concluída".to_string()
+                } else {
+                    "Sincronização falhou".to_string()
+                },
+            });
+
+            result.map_err(WsHandlerError::SincronizarUsuarios)?;
             Ok("Usuários sincronizados com sucesso!".to_string())
         },
         "EDITAR" => {
