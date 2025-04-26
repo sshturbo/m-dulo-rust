@@ -224,7 +224,7 @@ async fn handle_online_socket(
 
 async fn handle_sync_status_socket(
     mut socket: WebSocket,
-    pool: Pool<Sqlite>,
+    _pool: Pool<Sqlite>, // Adicionando underscore para indicar que é intencional não usar a variável
 ) {
     info!("Cliente conectado ao WebSocket /sync-status");
     

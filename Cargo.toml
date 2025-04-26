@@ -1,25 +1,33 @@
 [package]
-name = "m-dulo-rust"
+name = "m-dulo"
 version = "0.1.0"
 edition = "2021"
 authors = ["Jefferson Hipolito de Oliveira <suporte@webhostpro.com.br>"]
-description = "O m-dulo é um projeto em Rust que utiliza o framework web Axum para criar uma aplicação web assíncrona e de alto desempenho. Ele aproveita o Tokio para execução assíncrona, Serde para serialização/desserialização de dados em JSON, e um banco de dados SQLite via SQLx para persistência. A aplicação também utiliza UUIDs para geração de identifica"
+description = "O módulo é um projeto em Rust que utiliza o framework web Axum para criar uma aplicação web assíncrona e de alto desempenho. Ele aproveita o Tokio para execução assíncrona, Serde para serialização/desserialização de dados em JSON e um banco de dados SQLite via SQLx para persistência. A aplicação também utiliza UUIDs para geração de identificadores únicos."
 license = "MIT"
 repository = "https://github.com/sshturbo/m-dulo-rust"
 readme = "README.md"
 
-
 [dependencies]
+# Web framework
+axum = { version = "0.7", features = ["ws", "macros"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Banco de dados
 sqlx = { version = "0.7", features = [
     "runtime-tokio-rustls",
     "macros",
     "migrate",
     "sqlite"
 ] }
-axum = { version = "0.7", features = ["ws", "macros"] }
-tokio = { version = "1", features = ["full"] }
+
+# Serialização
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+# Utilitários
 uuid = { version = "1.5", features = ["v4"] }
 rand = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
@@ -29,3 +37,7 @@ env_logger = "0.10"
 thiserror = "1.0"
 lazy_static = "1.4.0"
 once_cell = "1.21.3"
+
+# Futures (async)
+futures = { version = "0.3", features = ["std", "async-await"] }
+futures-util = { version = "0.3", features = ["std", "async-await", "sink"] }

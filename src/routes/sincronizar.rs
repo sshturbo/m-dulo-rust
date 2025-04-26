@@ -1,6 +1,6 @@
 use crate::models::user::User;
-use sqlx::{Pool, Sqlite, Transaction};
-use std::collections::{HashMap, HashSet};
+use sqlx::{Pool, Sqlite};
+use std::collections::HashSet;
 use tokio::sync::{Mutex, broadcast};
 use std::sync::Arc;
 use std::process::Command;
@@ -10,10 +10,12 @@ use std::fs;
 use serde_json::Value;
 use crate::utils::restart_v2ray::reiniciar_v2ray;
 use crate::utils::restart_xray::reiniciar_xray;
-use futures::future::{join_all, timeout};
+use futures::future::join_all;
+use tokio::time::{timeout, sleep};
 use std::time::Duration;
 use log::{info, error, warn};
-use tokio::time::sleep;
+use std::future::Future;
+use crate::routes::criar::Database;
 
 const BATCH_SIZE: usize = 50;
 const MAX_RETRIES: u32 = 3;
@@ -26,8 +28,6 @@ pub enum SyncError {
     VerificarUsuario(String),
     #[error("Erro ao inserir usuário no banco de dados: {0}")]
     InserirUsuarioBanco(String),
-    #[error("Timeout na operação: {0}")]
-    Timeout(String),
     #[error("Erro na transação do banco: {0}")]
     TransacaoFalhou(String)
 }
@@ -86,6 +86,15 @@ impl SyncStatus {
         if let Some(err) = error {
             self.metrics.errors.push(err);
         }
+        
+        // Usando o campo total_users para calcular o progresso
+        let progress_percentage = (self.metrics.processed_users as f64 / self.metrics.total_users as f64 * 100.0) as u32;
+        info!("Progresso da sincronização: {}% ({}/{})", 
+            progress_percentage,
+            self.metrics.processed_users,
+            self.metrics.total_users
+        );
+        
         let _ = self.tx.send(self.metrics.clone());
     }
 }
@@ -112,11 +121,10 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
 }
 
 // Função auxiliar para retry de operações
-async fn with_retry<F, T, E>(operation: F) -> Result<T, E>
+async fn with_retry<F, T>(operation: F) -> Result<T, String>
 where
-    F: Fn() -> std::pin::Pin<Box<dyn Future<Output = Result<T, E>> + Send>> + Send + Sync,
+    F: Fn() -> std::pin::Pin<Box<dyn Future<Output = Result<T, String>> + Send>> + Send + Sync,
     T: Send,
-    E: std::fmt::Display + Send,
 {
     let mut retries = 0;
     loop {
@@ -135,7 +143,7 @@ where
             Err(_) => {
                 if retries >= MAX_RETRIES {
                     error!("Timeout após {} tentativas", MAX_RETRIES);
-                    return Err("Timeout nas operações".into());
+                    return Err("Timeout nas operações".to_string());
                 }
                 warn!("Timeout (tentativa {})", retries + 1);
                 retries += 1;
@@ -163,14 +171,14 @@ async fn processar_usuarios_em_lotes(
         .await
         .map_err(|e| SyncError::VerificarUsuario(e.to_string()))?;
 
-    // Processamento em chunks otimizado
-    let usuarios_para_remover: Vec<_> = usuarios_atuais
-        .iter()
+    // Criar vetores owned para processar
+    let usuarios_para_remover: Vec<User> = usuarios_atuais.clone()
+        .into_iter()
         .filter(|user_atual| !usuarios.iter().any(|u| u.login == user_atual.login))
         .collect();
 
-    let usuarios_para_adicionar: Vec<_> = usuarios
-        .iter()
+    let usuarios_para_adicionar: Vec<User> = usuarios.clone()
+        .into_iter()
         .filter(|user_novo| !usuarios_atuais.iter().any(|u| u.login == user_novo.login))
         .collect();
 
@@ -180,28 +188,40 @@ async fn processar_usuarios_em_lotes(
         let mut logins_to_delete = Vec::new();
 
         for user in chunk {
-            let user = user.clone();
+            let tipo = user.tipo.clone();
+            let uuid = user.uuid.clone();
+            let login = user.login.clone();
+            
+            // Clonando login antes de mover para a task
+            let login_for_task = login.clone();
             tasks.push(tokio::spawn(async move {
-                with_retry(|| Box::pin(async move {
-                    match user.tipo.as_str() {
-                        "xray" => {
-                            if let Some(uuid) = &user.uuid {
-                                remover_uuids_xray(&vec![uuid.clone()]).await;
-                            }
-                        },
-                        _ => {
-                            if let Some(uuid) = &user.uuid {
-                                remover_uuid_v2ray(uuid).await;
+                with_retry(|| {
+                    let tipo = tipo.clone();
+                    let uuid = uuid.clone();
+                    let login = login_for_task.clone();
+                    Box::pin(async move {
+                        match tipo.as_str() {
+                            "xray" => {
+                                if let Some(uuid) = &uuid {
+                                    remover_uuids_xray(&vec![uuid.clone()]).await;
+                                }
+                            },
+                            _ => {
+                                if let Some(uuid) = &uuid {
+                                    remover_uuid_v2ray(uuid).await;
+                                }
                             }
                         }
-                    }
-                    
-                    let _ = Command::new("pkill").args(["-u", &user.login]).status();
-                    let _ = Command::new("userdel").arg(&user.login).status();
-                    Ok::<_, String>(user.login.clone())
-                })).await
+                        
+                        let _ = Command::new("pkill").args(["-u", &login]).status();
+                        let _ = Command::new("userdel").arg(&login).status();
+                        Ok::<_, String>(login)
+                    })
+                }).await
             }));
-            logins_to_delete.push(user.login.clone());
+
+            // Agora podemos usar o login original aqui
+            logins_to_delete.push(login);
         }
 
         // Processa resultados e atualiza métricas
@@ -229,9 +249,15 @@ async fn processar_usuarios_em_lotes(
                 .collect::<Vec<_>>()
                 .join(",");
             
-            sqlx::query(&format!("DELETE FROM users WHERE login IN ({})", placeholders))
-                .bind_all(logins_to_delete)
-                .execute(&mut *transaction)
+            // Criar string da query como variável para evitar valor temporário
+            let query_str = format!("DELETE FROM users WHERE login IN ({})", placeholders);
+            let mut query = sqlx::query(&query_str);
+            
+            for login in logins_to_delete {
+                query = query.bind(login);
+            }
+            
+            query.execute(&mut *transaction)
                 .await
                 .map_err(|e| SyncError::InserirUsuarioBanco(e.to_string()))?;
         }
@@ -242,16 +268,24 @@ async fn processar_usuarios_em_lotes(
         let mut tasks = Vec::new();
 
         for user in chunk {
-            let user = user.clone();
+            let login = user.login.clone();
+            let senha = user.senha.clone();
+            let dias = user.dias;
+            let limite = user.limite;
+            
             tasks.push(tokio::spawn(async move {
-                with_retry(|| Box::pin(async move {
-                    adicionar_usuario_sistema(
-                        &user.login,
-                        &user.senha,
-                        user.dias as u32,
-                        user.limite as u32
-                    ).map_err(|e| e.to_string())
-                })).await
+                with_retry(|| {
+                    let login = login.clone();
+                    let senha = senha.clone();
+                    Box::pin(async move {
+                        adicionar_usuario_sistema(
+                            &login,
+                            &senha,
+                            dias as u32,
+                            limite as u32
+                        ).map_err(|e| e.to_string())
+                    })
+                }).await
             }));
 
             // Insere no banco usando a transação

@@ -29,7 +29,7 @@ use axum::{
 };
 use tokio::net::TcpListener;
 use crate::db::initialize_db;
-use crate::ws_handler::handler::{websocket_handler, websocket_online_handler};
+use crate::ws_handler::handler::{websocket_handler, websocket_online_handler, websocket_sync_status_handler};
 use env_logger::Env; 
 use std::sync::Arc;
 use std::collections::HashMap;
