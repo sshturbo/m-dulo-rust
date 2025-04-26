@@ -88,6 +88,10 @@ pub async fn editar_usuario(
         .status()
         .expect("Falha ao excluir usuário");
 
+    // Manter o dono e byid originais do usuário
+    let dono = existing_user.as_ref().unwrap().dono.clone();
+    let byid = existing_user.as_ref().unwrap().byid;
+
     let new_user = User {
         login: edit_req.login_novo.clone(),
         senha: edit_req.senha.clone(),
@@ -95,10 +99,12 @@ pub async fn editar_usuario(
         limite: edit_req.limite as i32,
         uuid: edit_req.uuid.clone(),
         tipo: edit_req.tipo.clone(),
+        dono,
+        byid,
     };
 
     let result = sqlx::query(
-        "UPDATE users SET login = ?, senha = ?, dias = ?, limite = ?, uuid = ?, tipo = ? WHERE login = ?"
+        "UPDATE users SET login = ?, senha = ?, dias = ?, limite = ?, uuid = ?, tipo = ?, dono = ?, byid = ? WHERE login = ?"
     )
     .bind(&new_user.login)
     .bind(&new_user.senha)
@@ -106,6 +112,8 @@ pub async fn editar_usuario(
     .bind(new_user.limite as i64)
     .bind(&new_user.uuid)
     .bind(&new_user.tipo)
+    .bind(&new_user.dono)
+    .bind(new_user.byid as i64)
     .bind(&edit_req.login_antigo)
     .execute(pool)
     .await;

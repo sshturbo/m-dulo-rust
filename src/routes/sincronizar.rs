@@ -60,7 +60,7 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
     // Adicionar ou atualizar todos os usuários recebidos
     for user in &usuarios {
         sqlx::query(
-            "INSERT OR REPLACE INTO users (login, senha, dias, limite, uuid, tipo, dono) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            "INSERT OR REPLACE INTO users (login, senha, dias, limite, uuid, tipo, dono, byid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(&user.login)
         .bind(&user.senha)
@@ -69,6 +69,7 @@ pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: V
         .bind(&user.uuid)
         .bind(&user.tipo)
         .bind(&user.dono)
+        .bind(user.byid as i64)
         .execute(pool)
         .await
         .map_err(|e| SyncError::InserirUsuarioBanco(e.to_string()))?;
