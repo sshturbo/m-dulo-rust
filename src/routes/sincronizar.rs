@@ -12,7 +12,7 @@ use crate::utils::restart_v2ray::reiniciar_v2ray;
 use crate::utils::restart_xray::reiniciar_xray;
 use futures::future::join_all;
 
-const BATCH_SIZE: usize = 50; // Tamanho do lote para processamento
+const BATCH_SIZE: usize = 50;
 
 pub type Database = Arc<Mutex<HashMap<String, User>>>;
 
