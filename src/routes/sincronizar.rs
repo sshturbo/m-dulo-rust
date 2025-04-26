@@ -17,7 +17,7 @@ use log::{info, error, warn};
 use std::future::Future;
 use crate::routes::criar::Database;
 
-const BATCH_SIZE: usize = 500;
+const BATCH_SIZE: usize = 150;
 const MAX_RETRIES: u32 = 3;
 const OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 const RETRY_DELAY: Duration = Duration::from_secs(1);
@@ -165,47 +165,106 @@ async fn processar_usuarios_em_lotes(
     let mut transaction = pool.begin().await
         .map_err(|e| SyncError::TransacaoFalhou(e.to_string()))?;
 
-    // Buscar todos os usuários atuais para remoção do sistema
+    // Buscar todos os usuários atuais do banco usando a transação
     let usuarios_atuais: Vec<User> = sqlx::query_as::<_, User>("SELECT * FROM users")
         .fetch_all(&mut *transaction)
         .await
         .map_err(|e| SyncError::VerificarUsuario(e.to_string()))?;
 
-    info!("Removendo todos os usuários existentes antes da sincronização");
-    
-    // Limpar todos os usuários do banco de dados
-    sqlx::query("DELETE FROM users")
-        .execute(&mut *transaction)
-        .await
-        .map_err(|e| SyncError::TransacaoFalhou(e.to_string()))?;
+    // Criar vetores owned para processar
+    let usuarios_para_remover: Vec<User> = usuarios_atuais.clone()
+        .into_iter()
+        .filter(|user_atual| !usuarios.iter().any(|u| u.login == user_atual.login))
+        .collect();
 
-    // Remover todos os usuários do sistema operacional e configurações
-    for user in usuarios_atuais {
-        let tipo = user.tipo.clone();
-        let uuid = user.uuid.clone();
-        let login = user.login.clone();
+    let usuarios_para_adicionar: Vec<User> = usuarios.clone()
+        .into_iter()
+        .filter(|user_novo| !usuarios_atuais.iter().any(|u| u.login == user_novo.login))
+        .collect();
 
-        // Remover do sistema operacional
-        let _ = Command::new("pkill").args(["-u", &login]).status();
-        let _ = Command::new("userdel").arg(&login).status();
+    // Processamento de remoções em paralelo com controle de erros
+    for chunk in usuarios_para_remover.chunks(BATCH_SIZE) {
+        let mut tasks = Vec::new();
+        let mut logins_to_delete = Vec::new();
 
-        // Remover das configurações do xray/v2ray
-        if let Some(uuid) = uuid {
-            match tipo.as_str() {
-                "xray" => {
-                    remover_uuids_xray(&vec![uuid.clone()]).await;
+        for user in chunk {
+            let tipo = user.tipo.clone();
+            let uuid = user.uuid.clone();
+            let login = user.login.clone();
+            
+            // Clonando login antes de mover para a task
+            let login_for_task = login.clone();
+            tasks.push(tokio::spawn(async move {
+                with_retry(|| {
+                    let tipo = tipo.clone();
+                    let uuid = uuid.clone();
+                    let login = login_for_task.clone();
+                    Box::pin(async move {
+                        match tipo.as_str() {
+                            "xray" => {
+                                if let Some(uuid) = &uuid {
+                                    remover_uuids_xray(&vec![uuid.clone()]).await;
+                                }
+                            },
+                            _ => {
+                                if let Some(uuid) = &uuid {
+                                    remover_uuid_v2ray(uuid).await;
+                                }
+                            }
+                        }
+                        
+                        let _ = Command::new("pkill").args(["-u", &login]).status();
+                        let _ = Command::new("userdel").arg(&login).status();
+                        Ok::<_, String>(login)
+                    })
+                }).await
+            }));
+
+            // Agora podemos usar o login original aqui
+            logins_to_delete.push(login);
+        }
+
+        // Processa resultados e atualiza métricas
+        for result in join_all(tasks).await {
+            match result {
+                Ok(Ok(login)) => {
+                    sync_status.lock().await.update(1, None);
+                    info!("Usuário {} removido com sucesso", login);
                 },
-                _ => {
-                    remover_uuid_v2ray(&uuid).await;
+                Ok(Err(e)) => {
+                    sync_status.lock().await.update(0, Some(e.to_string()));
+                    error!("Erro ao remover usuário: {}", e);
+                },
+                Err(e) => {
+                    sync_status.lock().await.update(0, Some(e.to_string()));
+                    error!("Erro na task de remoção: {}", e);
                 }
             }
         }
+
+        // Remove do banco em lote usando a transação
+        if !logins_to_delete.is_empty() {
+            let placeholders = std::iter::repeat("?")
+                .take(logins_to_delete.len())
+                .collect::<Vec<_>>()
+                .join(",");
+            
+            // Criar string da query como variável para evitar valor temporário
+            let query_str = format!("DELETE FROM users WHERE login IN ({})", placeholders);
+            let mut query = sqlx::query(&query_str);
+            
+            for login in logins_to_delete {
+                query = query.bind(login);
+            }
+            
+            query.execute(&mut *transaction)
+                .await
+                .map_err(|e| SyncError::InserirUsuarioBanco(e.to_string()))?;
+        }
     }
 
-    info!("Iniciando adição dos novos usuários");
-
-    // Processar adições em paralelo com controle de erros
-    for chunk in usuarios.chunks(BATCH_SIZE) {
+    // Processamento de adições em paralelo com controle de erros
+    for chunk in usuarios_para_adicionar.chunks(BATCH_SIZE) {
         let mut tasks = Vec::new();
 
         for user in chunk {
@@ -231,7 +290,7 @@ async fn processar_usuarios_em_lotes(
 
             // Insere no banco usando a transação
             sqlx::query(
-                "INSERT INTO users (login, senha, dias, limite, uuid, tipo, dono, byid) 
+                "INSERT OR REPLACE INTO users (login, senha, dias, limite, uuid, tipo, dono, byid) 
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
             )
             .bind(&user.login)
