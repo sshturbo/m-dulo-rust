@@ -52,7 +52,7 @@ pub async fn monitor_users(pool: Pool<Sqlite>) -> Result<serde_json::Value, Erro
         users.push(json!({
             "login": row.login,
             "limite": row.limite,
-            "online": row.usuarios_online,
+            "conexoes_simultaneas": row.usuarios_online,
             "tempo_online": format!(
                 "{:02}:{:02}:{:02}",
                 hours,
