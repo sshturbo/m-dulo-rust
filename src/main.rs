@@ -29,7 +29,7 @@ use axum::{
 };
 use tokio::net::TcpListener;
 use crate::db::initialize_db;
-use crate::ws_handler::handler::{websocket_handler, websocket_online_handler, websocket_sync_status_handler};
+use crate::ws_handler::handler::{websocket_handler, websocket_online_handler, websocket_sync_status_handler, websocket_domain_handler};
 use env_logger::Env; 
 use std::sync::Arc;
 use std::collections::HashMap;
@@ -50,6 +50,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .expect("Falha ao inicializar o banco de dados. Verifique as permissões do diretório.");
 
+    // Inicia o processo do cloudflared em uma nova task
+    let pool_clone = pool.clone();
+    tokio::spawn(async move {
+        crate::ws_handler::cloudflared::start_cloudflared_process(pool_clone).await;
+    });
+
     // Agora que o banco de dados está inicializado, podemos iniciar a tarefa do monitoramento de usuários
     let cloned_pool = pool.clone();
     tokio::spawn(async move {
@@ -66,6 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/", get(websocket_handler))
         .route("/online", get(websocket_online_handler))
         .route("/sync-status", get(websocket_sync_status_handler))
+        .route("/domain", get(websocket_domain_handler))
         .layer(Extension(db)) 
         .with_state(pool.clone()); 
 

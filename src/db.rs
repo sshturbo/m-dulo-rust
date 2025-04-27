@@ -2,6 +2,7 @@ use sqlx::{Pool, Sqlite, SqlitePool};
 use crate::config::Config;
 use std::fs;
 use std::path::Path;
+use log::{info, error};
 
 pub async fn initialize_db() -> Result<Pool<Sqlite>, sqlx::Error> {
     // Obter caminho do banco de dados do config.json
@@ -54,5 +55,59 @@ pub async fn initialize_db() -> Result<Pool<Sqlite>, sqlx::Error> {
     .execute(&pool)
     .await?;
 
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS dominio_cloudflare (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subdominio TEXT NOT NULL
+        )"
+    )
+    .execute(&pool)
+    .await?;
+
     Ok(pool)
+}
+
+// Função para salvar o subdomínio
+pub async fn salvar_subdominio(pool: &Pool<Sqlite>, subdominio: &str) -> Result<(), sqlx::Error> {
+    info!("Tentando salvar subdomínio: {}", subdominio);
+
+    // Executa dentro de uma transação para garantir consistência
+    let mut tx = pool.begin().await?;
+
+    // Deleta registros existentes
+    sqlx::query("DELETE FROM dominio_cloudflare")
+        .execute(&mut *tx)
+        .await?;
+
+    // Insere o novo registro
+    let result = sqlx::query(
+        "INSERT INTO dominio_cloudflare (subdominio) VALUES (?)"
+    )
+    .bind(subdominio)
+    .execute(&mut *tx)
+    .await?;
+
+    // Commit da transação
+    tx.commit().await?;
+
+    info!("Subdomínio salvo com sucesso. Rows affected: {}", result.rows_affected());
+    Ok(())
+}
+
+pub async fn buscar_subdominio(pool: &Pool<Sqlite>) -> Result<Option<String>, sqlx::Error> {
+    info!("Buscando subdomínio no banco...");
+    
+    let result = sqlx::query_scalar::<_, String>(
+        "SELECT subdominio FROM dominio_cloudflare ORDER BY id DESC LIMIT 1"
+    )
+    .fetch_optional(pool)
+    .await;
+
+    match &result {
+        Ok(Some(subdominio)) => info!("Subdomínio encontrado: {}", subdominio),
+        Ok(None) => info!("Nenhum subdomínio encontrado no banco"),
+        Err(e) => error!("Erro ao buscar subdomínio: {}", e),
+    }
+
+    result
 }

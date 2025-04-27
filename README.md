@@ -243,3 +243,9 @@ O binário gerado estará em:
 ```
 target/x86_64-unknown-linux-musl/release/
 ```
+
+## proxy reverso com zerotrust
+
+wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb
+sudo dpkg -i cloudflared-linux-arm64.deb
+cloudflared tunnel --url http://localhost:9001

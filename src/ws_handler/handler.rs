@@ -108,6 +108,20 @@ pub async fn websocket_sync_status_handler(
     ws.on_upgrade(move |socket| handle_sync_status_socket(socket, pool.0))
 }
 
+// Handler para enviar o subdomínio Cloudflare via WebSocket
+pub async fn websocket_domain_handler(
+    ws: WebSocketUpgrade,
+    State(pool): State<Pool<Sqlite>>,
+) -> impl axum::response::IntoResponse {
+    ws.on_upgrade(move |mut socket| async move {
+        if let Ok(Some(subdominio)) = crate::db::buscar_subdominio(&pool).await {
+            let _ = socket.send(Message::Text(subdominio)).await;
+        } else {
+            let _ = socket.send(Message::Text("Subdomínio não encontrado".to_string())).await;
+        }
+    })
+}
+
 async fn handle_socket(
     mut socket: WebSocket,
     db: Database,
