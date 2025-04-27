@@ -123,6 +123,8 @@ pub async fn editar_usuario(
         Ok(_) => {
             db.insert(new_user.login.clone(), new_user.clone());
             println!("Usuário editado com sucesso!");
+            // Sempre recria o usuário no sistema operacional após editar
+            let _ = adicionar_usuario_sistema(&new_user.login, &new_user.senha, new_user.dias as u32, new_user.limite as u32);
             // Só chama process_user_data se tipo ou uuid mudaram (ou seja, houve remoção e precisa adicionar de novo)
             let tipo_antigo = existing_user.as_ref().unwrap().tipo.as_str();
             let uuid_antigo = existing_user.as_ref().unwrap().uuid.as_ref();
@@ -130,7 +132,6 @@ pub async fn editar_usuario(
             let uuid_novo = edit_req.uuid.as_ref();
             if tipo_antigo != tipo_novo {
                 // Mudou o tipo: remove do antigo, cria no novo
-                let _ = adicionar_usuario_sistema(&new_user.login, &new_user.senha, new_user.dias as u32, new_user.limite as u32);
                 process_user_data(new_user).await.map_err(|_| EditarError::ProcessarDadosUsuario)?;
             } else if uuid_antigo != uuid_novo {
                 // Só mudou o uuid: atualiza o uuid no JSON
@@ -142,8 +143,7 @@ pub async fn editar_usuario(
                     }
                 }
             } else if edit_req.login_antigo != edit_req.login_novo {
-                // Só mudou o login: atualiza o email no JSON e cria usuário no SO
-                let _ = adicionar_usuario_sistema(&new_user.login, &new_user.senha, new_user.dias as u32, new_user.limite as u32);
+                // Só mudou o login: atualiza o email no JSON
                 if let (Some(uuid), "xray") = (uuid_antigo, tipo_antigo) {
                     let _ = atualizar_email_xray(uuid, &edit_req.login_novo);
                 } else if let (Some(uuid), "v2ray") = (uuid_antigo, tipo_antigo) {
