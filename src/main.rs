@@ -43,14 +43,29 @@ use crate::routes::online::monitor_online_users;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Restaurar backup do banco de dados, se existir
     let backup_path = "/opt/backup-mdulo/database.sqlite";
-    let db_path = "db/database.sqlite";
-    if std::path::Path::new(backup_path).exists() {
-        if let Err(e) = std::fs::copy(backup_path, db_path) {
-            eprintln!("Erro ao restaurar backup do banco de dados: {}", e);
-        } else {
-            println!("Backup do banco de dados restaurado com sucesso!");
+    let db_dir = "db";
+    let db_file = "database.sqlite";
+    let db_path = format!("{}/{}", db_dir, db_file);
+
+    // Criar diretório db se não existir
+    if !std::path::Path::new(db_dir).exists() {
+        if let Err(e) = std::fs::create_dir_all(db_dir) {
+            eprintln!("Erro ao criar diretório do banco de dados: {}", e);
         }
     }
+
+    // Tentar restaurar o backup se existir
+    if std::path::Path::new(backup_path).exists() {
+        println!("Backup encontrado, iniciando restauração...");
+        if let Err(e) = std::fs::copy(backup_path, &db_path) {
+            eprintln!("Erro ao restaurar backup do banco de dados: {}", e);
+        } else {
+            println!("✅ Backup do banco de dados restaurado com sucesso!");
+        }
+    } else {
+        println!("Nenhum backup encontrado em {}", backup_path);
+    }
+
     // Carregar configuração do config.json
     config::Config::load_from_file("config.json");
     // Inicializa o logger com o filtro de log configurado
