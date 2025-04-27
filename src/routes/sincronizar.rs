@@ -10,7 +10,6 @@ use std::fs;
 use serde_json::Value;
 use crate::utils::restart_v2ray::reiniciar_v2ray;
 use crate::utils::restart_xray::reiniciar_xray;
-use futures::future::join_all;
 use tokio::time::{timeout, sleep};
 use std::time::Duration;
 use log::{info, error, warn};
@@ -156,79 +155,70 @@ async fn processar_usuarios_em_lotes(
     config_cache: Arc<Mutex<ConfigCache>>
 ) -> Result<(), SyncError> {
     let db = db.clone();
-
     for chunk in usuarios.chunks(BATCH_SIZE) {
-        let mut tasks = Vec::new();
         for user in chunk {
             let pool = pool.clone();
             let db = db.clone();
             let user = user.clone();
-            tasks.push(tokio::spawn(async move {
-                let login = user.login.clone();
-                let senha = user.senha.clone();
-                let dias = user.dias;
-                let limite = user.limite;
-                // Remove o usuário do sistema operacional antes de criar, se existir
-                if Command::new("id").arg(&login).status().map(|s| s.success()).unwrap_or(false) {
-                    let _ = Command::new("pkill").args(["-u", &login]).status();
-                    let _ = Command::new("userdel").arg(&login).status();
-                }
-                with_retry(|| {
-                    let login = login.clone();
-                    let senha = senha.clone();
-                    let user = user.clone();
-                    let pool = pool.clone();
-                    let db = db.clone();
-                    Box::pin(async move {
-                        // 1. Cria usuário no SO
-                        adicionar_usuario_sistema(
-                            &login,
-                            &senha,
-                            dias as u32,
-                            limite as u32
-                        ).map_err(|e| e.to_string())?;
-                        // 2. Insere no banco em transação
-                        let mut transaction = pool.begin().await.map_err(|e| e.to_string())?;
-                        sqlx::query(
-                            "INSERT OR REPLACE INTO users (login, senha, dias, limite, uuid, tipo, dono, byid) \
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-                        )
-                        .bind(&user.login)
-                        .bind(&user.senha)
-                        .bind(user.dias as i64)
-                        .bind(user.limite as i64)
-                        .bind(&user.uuid)
-                        .bind(&user.tipo)
-                        .bind(&user.dono)
-                        .bind(user.byid as i64)
-                        .execute(&mut *transaction)
-                        .await
-                        .map_err(|e| e.to_string())?;
-                        transaction.commit().await.map_err(|e| e.to_string())?;
-                        // 3. Atualiza cache em memória
-                        let mut db = db.lock().await;
-                        db.insert(user.login.clone(), user.clone());
-                        Ok(())
-                    })
-                }).await
-            }));
-        }
-        // Processa resultados e atualiza métricas
-        for result in join_all(tasks).await {
+            let login = user.login.clone();
+            let senha = user.senha.clone();
+            let dias = user.dias;
+            let limite = user.limite;
+            // Remove o usuário do sistema operacional antes de criar, se existir
+            if Command::new("id").arg(&login).status().map(|s| s.success()).unwrap_or(false) {
+                let _ = Command::new("pkill").args(["-u", &login]).status();
+                let _ = Command::new("userdel").arg(&login).status();
+            }
+            let result = with_retry(|| {
+                let login = login.clone();
+                let senha = senha.clone();
+                let user = user.clone();
+                let pool = pool.clone();
+                let db = db.clone();
+                Box::pin(async move {
+                    // 1. Cria usuário no SO
+                    adicionar_usuario_sistema(
+                        &login,
+                        &senha,
+                        dias as u32,
+                        limite as u32
+                    ).map_err(|e| e.to_string())?;
+                    // 2. Insere no banco em transação
+                    let mut transaction = pool.begin().await.map_err(|e| e.to_string())?;
+                    sqlx::query(
+                        "INSERT OR REPLACE INTO users (login, senha, dias, limite, uuid, tipo, dono, byid) \
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                    )
+                    .bind(&user.login)
+                    .bind(&user.senha)
+                    .bind(user.dias as i64)
+                    .bind(user.limite as i64)
+                    .bind(&user.uuid)
+                    .bind(&user.tipo)
+                    .bind(&user.dono)
+                    .bind(user.byid as i64)
+                    .execute(&mut *transaction)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                    transaction.commit().await.map_err(|e| e.to_string())?;
+                    // 3. Atualiza cache em memória
+                    let mut db = db.lock().await;
+                    db.insert(user.login.clone(), user.clone());
+                    Ok(())
+                })
+            }).await;
             match result {
-                Ok(Ok(_)) => {
+                Ok(_) => {
                     sync_status.lock().await.update(1, None);
-                },
-                Ok(Err(e)) => {
-                    sync_status.lock().await.update(0, Some(e.to_string()));
-                    error!("Erro ao adicionar usuário: {}", e);
                 },
                 Err(e) => {
                     sync_status.lock().await.update(0, Some(e.to_string()));
-                    error!("Erro na task de adição: {}", e);
+                    error!("Erro ao adicionar usuário: {}", e);
                 }
             }
         }
+        // Pausa entre lotes
+        sleep(Duration::from_secs(1)).await;
     }
     // Atualiza configurações do Xray e V2Ray em paralelo
     let (xray_result, v2ray_result) = tokio::join!(
