@@ -114,6 +114,29 @@ pub async fn websocket_domain_handler(
     State(pool): State<Pool<Sqlite>>,
 ) -> impl axum::response::IntoResponse {
     ws.on_upgrade(move |mut socket| async move {
+        // Autenticação por token
+        if let Some(Ok(Message::Text(text))) = socket.recv().await {
+            let token = text.trim();
+            let expected_token = &Config::get().api_token;
+            if token != expected_token {
+                let _ = socket.send(Message::Text(serde_json::json!({
+                    "status": "error",
+                    "message": "Token inválido"
+                }).to_string())).await;
+                info!("Tentativa de conexão com token inválido na rota /domain");
+                return;
+            }
+            info!("Cliente autenticado com sucesso na rota /domain");
+        } else {
+            let _ = socket.send(Message::Text(serde_json::json!({
+                "status": "error",
+                "message": "Token não fornecido"
+            }).to_string())).await;
+            info!("Tentativa de conexão sem token na rota /domain");
+            return;
+        }
+
+        // Após autenticação, envia o subdomínio
         if let Ok(Some(subdominio)) = crate::db::buscar_subdominio(&pool).await {
             let _ = socket.send(Message::Text(subdominio)).await;
         } else {

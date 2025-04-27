@@ -192,6 +192,35 @@
     }
     ```
 
+### Domain (Cloudflare)
+
+- **Rota:** `/domain`
+- **Método:** WebSocket
+- **Descrição:** Esta rota retorna o subdomínio Cloudflare gerado pelo túnel. É necessário autenticação por token.
+- **Como usar:**
+
+    1. Conecte-se ao WebSocket em `ws://127.0.0.1:9001/domain`.
+    2. Envie o token de autenticação como primeira mensagem (igual às rotas `/online` e `/sync-status`).
+    3. Se o token for válido, o subdomínio será enviado como texto. Caso contrário, será enviada uma mensagem de erro e a conexão será encerrada.
+
+- **Exemplo de uso:**
+
+    ```javascript
+    const socket = new WebSocket('ws://127.0.0.1:9001/domain');
+    socket.onopen = () => {
+        socket.send('seu_token_aqui'); // Envie o token como primeira mensagem
+    };
+    socket.onmessage = (event) => {
+        console.log('Resposta:', event.data);
+    };
+    ```
+
+- **Possíveis respostas:**
+    - Subdomínio Cloudflare (ex: `https://algumacoisa.trycloudflare.com`)
+    - `{"status":"error","message":"Token inválido"}`
+    - `{"status":"error","message":"Token não fornecido"}`
+    - `Subdomínio não encontrado`
+
 ## Observações sobre os campos
 
 - O campo `"tipo"` (com valor `"v2ray"` ou `"xray"`) é **obrigatório** nas rotas de criação, edição e sincronização de usuários via WebSocket:
@@ -243,9 +272,3 @@ O binário gerado estará em:
 ```
 target/x86_64-unknown-linux-musl/release/
 ```
-
-## proxy reverso com zerotrust
-
-wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb
-sudo dpkg -i cloudflared-linux-arm64.deb
-cloudflared tunnel --url http://localhost:9001
