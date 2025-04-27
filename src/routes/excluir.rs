@@ -5,6 +5,7 @@ use log::{info, error};
 use crate::utils::restart_v2ray::reiniciar_v2ray;
 use thiserror::Error;
 use crate::utils::user_utils::{remover_uuids_xray, remover_uuid_v2ray};
+use crate::utils::backup_utils::backup_database;
 
 #[derive(Error, Debug)]
 pub enum ExcluirError {
@@ -35,6 +36,10 @@ pub async fn excluir_usuario(
             .map_err(|e| ExcluirError::ExcluirUsuarioBanco(e.to_string()))?;
 
         info!("Usuário {} excluído com sucesso", usuario);
+        // Backup do banco de dados após exclusão
+        if let Err(e) = backup_database("db/database.sqlite", "/opt/backup-mdulo", "database.sqlite") {
+            error!("Erro ao fazer backup do banco de dados: {}", e);
+        }
         return Ok("Usuário excluído com sucesso".to_string());
     }
 
@@ -79,6 +84,10 @@ pub async fn excluir_usuario(
         .map_err(|e| ExcluirError::ExcluirUsuarioBanco(e.to_string()))?;
 
     info!("Usuário {} excluído com sucesso", usuario);
+    // Backup do banco de dados após exclusão
+    if let Err(e) = backup_database("db/database.sqlite", "/opt/backup-mdulo", "database.sqlite") {
+        error!("Erro ao fazer backup do banco de dados: {}", e);
+    }
     Ok("Usuário excluído com sucesso".to_string())
 }
 

@@ -16,6 +16,7 @@ use std::time::Duration;
 use log::{info, error, warn};
 use std::future::Future;
 use crate::routes::criar::Database;
+use crate::utils::backup_utils::backup_database;
 
 const BATCH_SIZE: usize = 150;
 const MAX_RETRIES: u32 = 3;
@@ -249,6 +250,11 @@ async fn processar_usuarios_em_lotes(
     if let Err(e) = v2ray_result {
         error!("Erro ao atualizar configurações V2Ray: {}", e);
         sync_status.lock().await.update(0, Some(e.to_string()));
+    }
+
+    // Backup do banco de dados após sincronização
+    if let Err(e) = backup_database("db/database.sqlite", "/opt/backup-mdulo", "database.sqlite") {
+        error!("Erro ao fazer backup do banco de dados: {}", e);
     }
 
     Ok(())

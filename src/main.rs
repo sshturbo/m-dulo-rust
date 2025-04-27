@@ -20,6 +20,7 @@ mod utils {
     pub mod restart_xray;
     pub mod user_utils;
     pub mod online_utils;
+    pub mod backup_utils;
 }
 mod config;
 
@@ -40,6 +41,16 @@ use crate::routes::online::monitor_online_users;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Restaurar backup do banco de dados, se existir
+    let backup_path = "/opt/backup-mdulo/database.sqlite";
+    let db_path = "db/database.sqlite";
+    if std::path::Path::new(backup_path).exists() {
+        if let Err(e) = std::fs::copy(backup_path, db_path) {
+            eprintln!("Erro ao restaurar backup do banco de dados: {}", e);
+        } else {
+            println!("Backup do banco de dados restaurado com sucesso!");
+        }
+    }
     // Carregar configuração do config.json
     config::Config::load_from_file("config.json");
     // Inicializa o logger com o filtro de log configurado

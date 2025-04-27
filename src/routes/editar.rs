@@ -7,6 +7,7 @@ use tokio::sync::Mutex;
 use std::sync::Arc;
 use crate::utils::user_utils::{process_user_data, remover_uuid_v2ray, remover_uuids_xray, atualizar_email_xray, atualizar_email_v2ray, adicionar_usuario_sistema, atualizar_uuid_xray, atualizar_uuid_v2ray};
 use thiserror::Error;
+use crate::utils::backup_utils::backup_database;
 
 pub type Database = Arc<Mutex<HashMap<String, User>>>;
 
@@ -148,6 +149,10 @@ pub async fn editar_usuario(
                 } else if let (Some(uuid), "v2ray") = (uuid_antigo, tipo_antigo) {
                     let _ = atualizar_email_v2ray(uuid, &edit_req.login_novo);
                 }
+            }
+            // Backup do banco de dados após edição
+            if let Err(e) = backup_database("db/database.sqlite", "/opt/backup-mdulo", "database.sqlite") {
+                eprintln!("Erro ao fazer backup do banco de dados: {}", e);
             }
             Ok(())
         }

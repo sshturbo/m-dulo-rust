@@ -5,6 +5,7 @@ use tokio::sync::Mutex;
 use std::sync::Arc;
 use crate::utils::user_utils::process_user_data;
 use thiserror::Error;
+use crate::utils::backup_utils::backup_database;
 
 pub type Database = Arc<Mutex<HashMap<String, User>>>;
 
@@ -51,5 +52,11 @@ pub async fn criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Res
     db.insert(user.login.clone(), user.clone());
     println!("Usuário criado com sucesso!");
     process_user_data(user).await.map_err(|_| CriarError::ProcessarDadosUsuario)?;
+
+    // Backup do banco de dados
+    if let Err(e) = backup_database("db/database.sqlite", "/opt/backup-mdulo", "database.sqlite") {
+        eprintln!("Erro ao fazer backup do banco de dados: {}", e);
+    }
+    
     Ok(())
 }

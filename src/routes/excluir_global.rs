@@ -5,6 +5,7 @@ use crate::utils::restart_v2ray::reiniciar_v2ray;
 use thiserror::Error;
 use std::fs;
 use serde_json::Value;
+use crate::utils::backup_utils::backup_database;
 
 #[derive(Error, Debug)]
 pub enum ExcluirGlobalError {
@@ -144,6 +145,11 @@ pub async fn excluir_global(
 
     if deve_reiniciar_v2ray {
         reiniciar_v2ray().await;
+    }
+
+    // Backup do banco de dados após exclusão global
+    if let Err(e) = backup_database("db/database.sqlite", "/opt/backup-mdulo", "database.sqlite") {
+        eprintln!("Erro ao fazer backup do banco de dados: {}", e);
     }
 
     Ok(())
