@@ -38,6 +38,7 @@ use crate::routes::criar::Database;
 use tokio::sync::Mutex;
 use axum::Extension; 
 use crate::routes::online::monitor_online_users;
+use crate::utils::backup_utils::restore_backup;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -45,25 +46,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let backup_path = "/opt/backup-mdulo/database.sqlite";
     let db_dir = "db";
     let db_file = "database.sqlite";
-    let db_path = format!("{}/{}", db_dir, db_file);
 
-    // Criar diretório db se não existir
-    if !std::path::Path::new(db_dir).exists() {
-        if let Err(e) = std::fs::create_dir_all(db_dir) {
-            eprintln!("Erro ao criar diretório do banco de dados: {}", e);
-        }
-    }
-
-    // Tentar restaurar o backup se existir
-    if std::path::Path::new(backup_path).exists() {
-        println!("Backup encontrado, iniciando restauração...");
-        if let Err(e) = std::fs::copy(backup_path, &db_path) {
-            eprintln!("Erro ao restaurar backup do banco de dados: {}", e);
-        } else {
-            println!("✅ Backup do banco de dados restaurado com sucesso!");
-        }
-    } else {
-        println!("Nenhum backup encontrado em {}", backup_path);
+    match restore_backup(backup_path, db_dir, db_file) {
+        Ok(_) => {
+            if Path::new(backup_path).exists() {
+                println!("✅ Backup do banco de dados restaurado com sucesso!");
+            } else {
+                println!("Nenhum backup encontrado em {}", backup_path);
+            }
+        },
+        Err(e) => eprintln!("Erro ao restaurar backup do banco de dados: {}", e),
     }
 
     // Carregar configuração do config.json
