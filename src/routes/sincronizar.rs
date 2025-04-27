@@ -24,12 +24,7 @@ const OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
 #[derive(Error, Debug)]
-pub enum SyncError {
-    #[error("Erro ao inserir usuário no banco de dados: {0}")]
-    InserirUsuarioBanco(String),
-    #[error("Erro na transação do banco: {0}")]
-    TransacaoFalhou(String)
-}
+pub enum SyncError {}
 
 // Cache de configurações
 #[derive(Clone)]
@@ -160,60 +155,64 @@ async fn processar_usuarios_em_lotes(
     sync_status: Arc<Mutex<SyncStatus>>,
     config_cache: Arc<Mutex<ConfigCache>>
 ) -> Result<(), SyncError> {
-    let mut db = db.lock().await;
-    let mut transaction = pool.begin().await
-        .map_err(|e| SyncError::TransacaoFalhou(e.to_string()))?;
+    let db = db.clone();
 
-    // Processamento de adições em paralelo com controle de erros
     for chunk in usuarios.chunks(BATCH_SIZE) {
         let mut tasks = Vec::new();
-
         for user in chunk {
-            let login = user.login.clone();
-            let senha = user.senha.clone();
-            let dias = user.dias;
-            let limite = user.limite;
-            // Remove o usuário do sistema operacional antes de criar, se existir
-            if Command::new("id").arg(&login).status().map(|s| s.success()).unwrap_or(false) {
-                let _ = Command::new("pkill").args(["-u", &login]).status();
-                let _ = Command::new("userdel").arg(&login).status();
-            }
+            let pool = pool.clone();
+            let db = db.clone();
+            let user = user.clone();
             tasks.push(tokio::spawn(async move {
+                let login = user.login.clone();
+                let senha = user.senha.clone();
+                let dias = user.dias;
+                let limite = user.limite;
+                // Remove o usuário do sistema operacional antes de criar, se existir
+                if Command::new("id").arg(&login).status().map(|s| s.success()).unwrap_or(false) {
+                    let _ = Command::new("pkill").args(["-u", &login]).status();
+                    let _ = Command::new("userdel").arg(&login).status();
+                }
                 with_retry(|| {
                     let login = login.clone();
                     let senha = senha.clone();
+                    let user = user.clone();
+                    let pool = pool.clone();
+                    let db = db.clone();
                     Box::pin(async move {
+                        // 1. Cria usuário no SO
                         adicionar_usuario_sistema(
                             &login,
                             &senha,
                             dias as u32,
                             limite as u32
-                        ).map_err(|e| e.to_string())
+                        ).map_err(|e| e.to_string())?;
+                        // 2. Insere no banco em transação
+                        let mut transaction = pool.begin().await.map_err(|e| e.to_string())?;
+                        sqlx::query(
+                            "INSERT OR REPLACE INTO users (login, senha, dias, limite, uuid, tipo, dono, byid) \
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                        )
+                        .bind(&user.login)
+                        .bind(&user.senha)
+                        .bind(user.dias as i64)
+                        .bind(user.limite as i64)
+                        .bind(&user.uuid)
+                        .bind(&user.tipo)
+                        .bind(&user.dono)
+                        .bind(user.byid as i64)
+                        .execute(&mut *transaction)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                        transaction.commit().await.map_err(|e| e.to_string())?;
+                        // 3. Atualiza cache em memória
+                        let mut db = db.lock().await;
+                        db.insert(user.login.clone(), user.clone());
+                        Ok(())
                     })
                 }).await
             }));
-
-            // Insere no banco usando a transação
-            sqlx::query(
-                "INSERT OR REPLACE INTO users (login, senha, dias, limite, uuid, tipo, dono, byid) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-            )
-            .bind(&user.login)
-            .bind(&user.senha)
-            .bind(user.dias as i64)
-            .bind(user.limite as i64)
-            .bind(&user.uuid)
-            .bind(&user.tipo)
-            .bind(&user.dono)
-            .bind(user.byid as i64)
-            .execute(&mut *transaction)
-            .await
-            .map_err(|e| SyncError::InserirUsuarioBanco(e.to_string()))?;
-
-            // Atualiza o cache em memória
-            db.insert(user.login.clone(), user.clone());
         }
-
         // Processa resultados e atualiza métricas
         for result in join_all(tasks).await {
             match result {
@@ -231,32 +230,23 @@ async fn processar_usuarios_em_lotes(
             }
         }
     }
-
-    // Commit da transação
-    transaction.commit().await
-        .map_err(|e| SyncError::TransacaoFalhou(e.to_string()))?;
-
     // Atualiza configurações do Xray e V2Ray em paralelo
     let (xray_result, v2ray_result) = tokio::join!(
         atualizar_configs_xray(&usuarios, config_cache.clone()),
         atualizar_configs_v2ray(&usuarios, config_cache.clone())
     );
-
     if let Err(e) = xray_result {
         error!("Erro ao atualizar configurações Xray: {}", e);
         sync_status.lock().await.update(0, Some(e.to_string()));
     }
-
     if let Err(e) = v2ray_result {
         error!("Erro ao atualizar configurações V2Ray: {}", e);
         sync_status.lock().await.update(0, Some(e.to_string()));
     }
-
     // Backup do banco de dados após sincronização
     if let Err(e) = backup_database("db/database.sqlite", "/opt/backup-mdulo", "database.sqlite") {
         error!("Erro ao fazer backup do banco de dados: {}", e);
     }
-
     Ok(())
 }
 
