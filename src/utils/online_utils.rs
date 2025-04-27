@@ -8,7 +8,7 @@ pub fn get_users() -> Result<String, Error> {
     // Busca usuários SSH
     let ssh_output = Command::new("sh")
         .arg("-c")
-        .arg("ps aux | grep -v grep | grep 'sshd:' | grep -v root | awk '{print $1}'")
+        .arg("ps aux | grep '[s]shd:' | grep '\[priv\]' | awk -F'sshd: ' '{print $2}' | awk '{print $1}' | grep -v '^root$'")
         .output()?;
 
     let ssh_users = String::from_utf8_lossy(&ssh_output.stdout);
