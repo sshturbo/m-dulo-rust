@@ -2,8 +2,7 @@ use std::fs::File;
 use std::io::{self, BufRead, Error};
 use std::process::Command;
 
-#[allow(dead_code)]
-pub fn get_users() -> Result<String, Error> {
+fn get_users() -> Result<String, Error> {
     let mut user_list = Vec::new();
 
     // === SSH Users ===
@@ -50,10 +49,15 @@ pub fn get_users() -> Result<String, Error> {
     Ok(user_list.join(","))
 }
 
-#[allow(dead_code)]
-pub fn execute_command(command: &str, args: &[&str]) -> Result<(), Error> {
-    Command::new(command)
-        .args(args)
-        .output()?;
-    Ok(())
+fn main() {
+    match get_users() {
+        Ok(user_list) => {
+            if !user_list.is_empty() {
+                println!("Usuários conectados: {}", user_list);
+            } else {
+                println!("Nenhum usuário encontrado.");
+            }
+        }
+        Err(e) => eprintln!("Erro ao obter usuários: {}", e),
+    }
 }
