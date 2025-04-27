@@ -138,10 +138,33 @@ pub async fn websocket_domain_handler(
 
         // Após autenticação, envia o subdomínio
         if let Ok(Some(subdominio)) = crate::db::buscar_subdominio(&pool).await {
-            let _ = socket.send(Message::Text(subdominio)).await;
+            let _ = socket.send(Message::Text(subdominio.clone())).await;
         } else {
             let _ = socket.send(Message::Text("Subdomínio não encontrado".to_string())).await;
         }
+
+        // Mantém a conexão ativa e processa mensagens
+        while let Some(msg) = socket.recv().await {
+            match msg {
+                Ok(Message::Close(_)) => {
+                    info!("Cliente solicitou fechamento da conexão WebSocket /domain");
+                    break;
+                }
+                Ok(Message::Ping(data)) => {
+                    if let Err(e) = socket.send(Message::Pong(data)).await {
+                        error!("Erro ao responder ping em /domain: {}", e);
+                        break;
+                    }
+                }
+                Err(e) => {
+                    error!("Erro ao receber mensagem do cliente em /domain: {}", e);
+                    break;
+                }
+                _ => {} // Ignora outros tipos de mensagem
+            }
+        }
+
+        info!("Conexão WebSocket /domain encerrada");
     })
 }
 
