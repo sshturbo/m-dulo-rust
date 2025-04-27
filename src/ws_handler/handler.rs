@@ -136,11 +136,21 @@ pub async fn websocket_domain_handler(
             return;
         }
 
-        // Após autenticação, envia o subdomínio
+        // Após autenticação, envia o subdomínio em formato JSON
         if let Ok(Some(subdominio)) = crate::db::buscar_subdominio(&pool).await {
-            let _ = socket.send(Message::Text(subdominio.clone())).await;
+            let response = serde_json::json!({
+                "status": "success",
+                "data": {
+                    "subdomain": subdominio
+                }
+            });
+            let _ = socket.send(Message::Text(response.to_string())).await;
         } else {
-            let _ = socket.send(Message::Text("Subdomínio não encontrado".to_string())).await;
+            let response = serde_json::json!({
+                "status": "error",
+                "message": "Subdomínio não encontrado"
+            });
+            let _ = socket.send(Message::Text(response.to_string())).await;
         }
 
         // Mantém a conexão ativa e processa mensagens
