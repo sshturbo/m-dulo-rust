@@ -40,3 +40,5 @@ futures-util = { version = "0.3", features = ["std", "async-await", "sink"] }
 
 # Additional dependencies
 which = "4.4"
+
+url = "2"
