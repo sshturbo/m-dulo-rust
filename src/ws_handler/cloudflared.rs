@@ -7,37 +7,79 @@ use futures_util::StreamExt;
 use std::pin::Pin;
 use tokio_stream::wrappers::LinesStream;
 
+/// Instala o cloudflared usando o método recomendado via repositório APT.
+async fn instalar_cloudflared() -> Result<(), String> {
+    use std::process::Command;
+    use log::error;
+
+    // 1. Cria o diretório de keyrings
+    let status = Command::new("sudo")
+        .arg("mkdir").arg("-p").arg("--mode=0755").arg("/usr/share/keyrings")
+        .status();
+    if let Err(e) = status {
+        error!("Erro ao criar diretório de keyrings: {}", e);
+        return Err("Erro ao criar diretório de keyrings".into());
+    }
+
+    // 2. Baixa e adiciona a chave GPG
+    let status = Command::new("bash")
+        .arg("-c")
+        .arg("curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null")
+        .status();
+    if let Err(e) = status {
+        error!("Erro ao baixar chave GPG: {}", e);
+        return Err("Erro ao baixar chave GPG".into());
+    }
+
+    // 3. Adiciona o repositório do cloudflared
+    let status = Command::new("bash")
+        .arg("-c")
+        .arg("echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' | sudo tee /etc/apt/sources.list.d/cloudflared.list")
+        .status();
+    if let Err(e) = status {
+        error!("Erro ao adicionar repositório cloudflared: {}", e);
+        return Err("Erro ao adicionar repositório cloudflared".into());
+    }
+
+    // 4. Atualiza a lista de pacotes
+    let status = Command::new("sudo")
+        .arg("apt-get").arg("update")
+        .status();
+    if let Err(e) = status {
+        error!("Erro ao atualizar lista de pacotes: {}", e);
+        return Err("Erro ao atualizar lista de pacotes".into());
+    }
+
+    // 5. Instala o cloudflared
+    let status = Command::new("sudo")
+        .arg("apt-get").arg("install").arg("-y").arg("cloudflared")
+        .status();
+    match status {
+        Ok(s) if s.success() => Ok(()),
+        Ok(s) => {
+            error!("Falha ao instalar cloudflared, código de saída: {}", s);
+            Err("Falha ao instalar cloudflared".into())
+        },
+        Err(e) => {
+            error!("Erro ao instalar cloudflared: {}", e);
+            Err("Erro ao instalar cloudflared".into())
+        }
+    }
+}
+
 pub async fn start_cloudflared_process(pool: Pool<Sqlite>) {
     info!("Iniciando processo do cloudflared...");
 
     // Verifica se cloudflared está instalado
     if which::which("cloudflared").is_err() {
-        info!("Cloudflared não encontrado, instalando...");
-        let _ = std::process::Command::new("sudo")
-            .arg("mkdir")
-            .arg("-p")
-            .arg("--mode=0755")
-            .arg("/usr/share/keyrings")
-            .status();
-        let _ = std::process::Command::new("bash")
-            .arg("-c")
-            .arg("curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null")
-            .status();
-        let _ = std::process::Command::new("bash")
-            .arg("-c")
-            .arg("echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' | sudo tee /etc/apt/sources.list.d/cloudflared.list")
-            .status();
-        let _ = std::process::Command::new("sudo")
-            .arg("apt-get")
-            .arg("update")
-            .status();
-        let _ = std::process::Command::new("sudo")
-            .arg("apt-get")
-            .arg("install")
-            .arg("-y")
-            .arg("cloudflared")
-            .status();
-        info!("Cloudflared instalado com sucesso");
+        info!("Cloudflared não encontrado, iniciando instalação...");
+        match instalar_cloudflared().await {
+            Ok(_) => info!("Cloudflared instalado com sucesso"),
+            Err(e) => {
+                error!("Erro na instalação do cloudflared: {}", e);
+                return;
+            }
+        }
     }
 
     loop {
