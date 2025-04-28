@@ -11,19 +11,15 @@ use serde_json::Value;
 use crate::utils::restart_v2ray::reiniciar_v2ray;
 use crate::utils::restart_xray::reiniciar_xray;
 use futures::future::join_all;
-use tokio::time::{timeout, sleep};
 use std::time::Duration;
-use log::{info, error, warn};
-use std::future::Future;
+use log::{info, error};
 use crate::routes::criar::Database;
 
-const BATCH_SIZE: usize = 20;
-const MAX_RETRIES: u32 = 3;
-const OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
-const RETRY_DELAY: Duration = Duration::from_secs(1);
-
 #[derive(Error, Debug)]
-pub enum SyncError {}
+pub enum SyncError {
+    #[error("Erro de banco de dados")] 
+    Database,
+}
 
 // Cache de configurações
 #[derive(Clone)]
@@ -113,39 +109,6 @@ pub async fn sincronizar_usuarios(db: Database, pool: &PgPool, usuarios: Vec<Use
     Ok(format!("Iniciado processamento de {} usuários em background", usuarios_len))
 }
 
-// Função auxiliar para retry de operações
-async fn with_retry<F, T>(operation: F) -> Result<T, String>
-where
-    F: Fn() -> std::pin::Pin<Box<dyn Future<Output = Result<T, String>> + Send>> + Send + Sync,
-    T: Send,
-{
-    let mut retries = 0;
-    loop {
-        match timeout(OPERATION_TIMEOUT, operation()).await {
-            Ok(result) => match result {
-                Ok(value) => return Ok(value),
-                Err(e) => {
-                    if retries >= MAX_RETRIES {
-                        return Err(e);
-                    }
-                    warn!("Operação falhou (tentativa {}): {}", retries + 1, e);
-                    retries += 1;
-                    sleep(RETRY_DELAY).await;
-                }
-            },
-            Err(_) => {
-                if retries >= MAX_RETRIES {
-                    error!("Timeout após {} tentativas", MAX_RETRIES);
-                    return Err("Timeout nas operações".to_string());
-                }
-                warn!("Timeout (tentativa {})", retries + 1);
-                retries += 1;
-                sleep(RETRY_DELAY).await;
-            }
-        }
-    }
-}
-
 // Função que processa os usuários em lotes
 async fn processar_usuarios_em_lotes(
     db: Database, 
@@ -156,89 +119,81 @@ async fn processar_usuarios_em_lotes(
 ) -> Result<(), SyncError> {
     let db = db.clone();
 
-    for chunk in usuarios.chunks(BATCH_SIZE) {
-        let mut tasks = Vec::new();
-        for user in chunk {
-            let pool = pool.clone();
-            let db = db.clone();
-            let user = user.clone();
-            tasks.push(tokio::spawn(async move {
-                let login = user.login.clone();
-                let senha = user.senha.clone();
-                let dias = user.dias;
-                let limite = user.limite;
-                // Remove o usuário do sistema operacional antes de criar, se existir
-                if Command::new("id").arg(&login).status().map(|s| s.success()).unwrap_or(false) {
-                    let _ = Command::new("pkill").args(["-u", &login]).status();
-                    let _ = Command::new("userdel").arg(&login).status();
-                }
-                with_retry(|| {
-                    let login = login.clone();
-                    let senha = senha.clone();
-                    let user = user.clone();
-                    let pool = pool.clone();
-                    let db = db.clone();
-                    Box::pin(async move {
-                        // 1. Cria usuário no SO
-                        adicionar_usuario_sistema(
-                            &login,
-                            &senha,
-                            dias as u32,
-                            limite as u32
-                        ).map_err(|e| e.to_string())?;
-                        // 2. Insere no banco em transação
-                        let mut transaction = pool.begin().await.map_err(|e| e.to_string())?;
-                        sqlx::query(
-                            "INSERT INTO users (login, senha, dias, limite, uuid, tipo, dono, byid) \
-                             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\
-                             ON CONFLICT (login) DO UPDATE SET \
-                                senha = EXCLUDED.senha,\
-                                dias = EXCLUDED.dias,\
-                                limite = EXCLUDED.limite,\
-                                uuid = EXCLUDED.uuid,\
-                                tipo = EXCLUDED.tipo,\
-                                dono = EXCLUDED.dono,\
-                                byid = EXCLUDED.byid"
-                        )
-                        .bind(&user.login)
-                        .bind(&user.senha)
-                        .bind(user.dias as i32)
-                        .bind(user.limite as i32)
-                        .bind(&user.uuid)
-                        .bind(&user.tipo)
-                        .bind(&user.dono)
-                        .bind(user.byid as i32)
-                        .execute(&mut *transaction)
-                        .await
-                        .map_err(|e| e.to_string())?;
-                        transaction.commit().await.map_err(|e| e.to_string())?;
-                        // 3. Atualiza cache em memória
-                        let mut db = db.lock().await;
-                        db.insert(user.login.clone(), user.clone());
-                        Ok(())
-                    })
-                }).await
-            }));
-        }
-        // Processa resultados e atualiza métricas
-        for result in join_all(tasks).await {
-            match result {
-                Ok(Ok(_)) => {
-                    sync_status.lock().await.update(1, None);
-                },
-                Ok(Err(e)) => {
-                    sync_status.lock().await.update(0, Some(e.to_string()));
-                    error!("Erro ao adicionar usuário: {}", e);
-                },
-                Err(e) => {
-                    sync_status.lock().await.update(0, Some(e.to_string()));
-                    error!("Erro na task de adição: {}", e);
-                }
+    // Cria todos os usuários no SO em paralelo (mantém a performance)
+    let mut tasks = Vec::new();
+    for user in &usuarios {
+        let user = user.clone();
+        tasks.push(tokio::spawn(async move {
+            let login = user.login.clone();
+            let senha = user.senha.clone();
+            let dias = user.dias;
+            let limite = user.limite;
+            // Remove o usuário do sistema operacional antes de criar, se existir
+            if Command::new("id").arg(&login).status().map(|s| s.success()).unwrap_or(false) {
+                let _ = Command::new("pkill").args(["-u", &login]).status();
+                let _ = Command::new("userdel").arg(&login).status();
+            }
+            adicionar_usuario_sistema(
+                &login,
+                &senha,
+                dias as u32,
+                limite as u32
+            ).map_err(|e| e.to_string())
+        }));
+    }
+    // Aguarda todos os SO serem criados
+    let so_results = join_all(tasks).await;
+    for result in so_results.into_iter() {
+        match result {
+            Ok(Ok(_)) => {
+                sync_status.lock().await.update(1, None);
+            },
+            Ok(Err(e)) => {
+                sync_status.lock().await.update(0, Some(e.to_string()));
+                error!("Erro ao adicionar usuário no SO: {}", e);
+            },
+            Err(e) => {
+                sync_status.lock().await.update(0, Some(e.to_string()));
+                error!("Erro na task de adição SO: {}", e);
             }
         }
-        // Adiciona um pequeno delay entre os lotes
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }
+
+    // Agora faz todos os inserts/updates no banco em uma única transação
+    let mut transaction = pool.begin().await.map_err(|_| SyncError::Database)?;
+    for user in &usuarios {
+        sqlx::query(
+            "INSERT INTO users (login, senha, dias, limite, uuid, tipo, dono, byid) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\
+             ON CONFLICT (login) DO UPDATE SET \
+                senha = EXCLUDED.senha,\
+                dias = EXCLUDED.dias,\
+                limite = EXCLUDED.limite,\
+                uuid = EXCLUDED.uuid,\
+                tipo = EXCLUDED.tipo,\
+                dono = EXCLUDED.dono,\
+                byid = EXCLUDED.byid"
+        )
+        .bind(&user.login)
+        .bind(&user.senha)
+        .bind(user.dias as i32)
+        .bind(user.limite as i32)
+        .bind(&user.uuid)
+        .bind(&user.tipo)
+        .bind(&user.dono)
+        .bind(user.byid as i32)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|e| {
+            error!("Erro ao inserir/atualizar usuário {}: {}", user.login, e);
+            SyncError::Database
+        })?;
+        // Atualiza cache em memória
+        let mut db = db.lock().await;
+        db.insert(user.login.clone(), user.clone());
+    }
+    transaction.commit().await.map_err(|_| SyncError::Database)?;
+
     // Atualiza configurações do Xray e V2Ray em paralelo
     let (xray_result, v2ray_result) = tokio::join!(
         atualizar_configs_xray(&usuarios, config_cache.clone()),
