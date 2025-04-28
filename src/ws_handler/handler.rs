@@ -170,7 +170,7 @@ pub async fn websocket_domain_handler(
                     error!("Erro ao receber mensagem do cliente em /domain: {}", e);
                     break;
                 }
-                _ => {} // Ignora outros tipos de mensagem
+                _ => {}
             }
         }
 
