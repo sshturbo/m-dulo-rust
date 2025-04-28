@@ -1,71 +1,54 @@
-use sqlx::{PgPool, Error};
+use redis::AsyncCommands;
 use chrono::{NaiveDateTime, Local};
 use serde_json::json;
-use log::error;
 
-#[derive(sqlx::FromRow)]
-struct OnlineUser {
-    login: String,
-    limite: i64,
-    inicio_sessao: String,
-    usuarios_online: i64,
-    status: String,
-    dono: String,
-    byid: i64
-}
-
-pub async fn monitor_users(pool: PgPool) -> Result<serde_json::Value, Error> {
-    let rows = sqlx::query_as::<_, OnlineUser>(
-        "SELECT o.login, o.limite, o.inicio_sessao, o.usuarios_online, o.status, u.dono, u.byid
-         FROM online o
-         JOIN users u ON o.login = u.login
-         WHERE o.status = 'On' AND o.usuarios_online > 0
-         ORDER BY o.login ASC"
-    )
-    .fetch_all(&pool)
-    .await?;
-
-    if rows.is_empty() {
+pub async fn monitor_users(mut redis_conn: redis::aio::Connection) -> Result<serde_json::Value, redis::RedisError> {
+    let logins: Vec<String> = redis_conn.smembers("online_users").await?;
+    if logins.is_empty() {
         return Ok(json!({
             "status": "success",
             "message": "Nenhum usuário online no momento",
             "users": []
         }));
     }
-
     let mut users = Vec::new();
     let current_time = Local::now().naive_local();
-
-    for row in rows {
-        let inicio_sessao = match NaiveDateTime::parse_from_str(&row.inicio_sessao, "%d/%m/%Y %H:%M:%S") {
-            Ok(dt) => dt,
-            Err(e) => {
-                error!("Erro ao parsear inicio_sessao para usuário '{}': {}", row.login, e);
-                continue;
+    for login in logins {
+        let key = format!("online:{}", login);
+        let user_data: Option<redis::Value> = redis_conn.hgetall(&key).await.ok();
+        if let Some(redis::Value::Bulk(ref fields)) = user_data {
+            let mut map = std::collections::HashMap::new();
+            let mut i = 0;
+            while i + 1 < fields.len() {
+                if let (redis::Value::Data(ref k), redis::Value::Data(ref v)) = (&fields[i], &fields[i+1]) {
+                    let k = String::from_utf8_lossy(k).to_string();
+                    let v = String::from_utf8_lossy(v).to_string();
+                    map.insert(k, v);
+                }
+                i += 2;
             }
-        };
-        
-        let duration = current_time.signed_duration_since(inicio_sessao);
-        let hours = duration.num_hours();
-        let minutes = duration.num_minutes() % 60;
-        let seconds = duration.num_seconds() % 60;
-
-        users.push(json!({
-            "login": row.login,
-            "limite": row.limite,
-            "conexoes_simultaneas": row.usuarios_online,
-            "tempo_online": format!(
-                "{:02}:{:02}:{:02}",
-                hours,
-                minutes,
-                seconds
-            ),
-            "status": row.status,
-            "dono": row.dono,
-            "byid": row.byid
-        }));
+            let inicio_sessao = map.get("inicio_sessao").cloned().unwrap_or_default();
+            let usuarios_online = map.get("usuarios_online").and_then(|v| v.parse::<i64>().ok()).unwrap_or(0);
+            let status = map.get("status").cloned().unwrap_or_default();
+            let limite = map.get("limite").and_then(|v| v.parse::<i64>().ok()).unwrap_or(0);
+            let byid = map.get("byid").and_then(|v| v.parse::<i64>().ok()).unwrap_or(0);
+            let dono = map.get("dono").cloned().unwrap_or_default();
+            let inicio_sessao_dt = NaiveDateTime::parse_from_str(&inicio_sessao, "%d/%m/%Y %H:%M:%S").unwrap_or(current_time);
+            let duration = current_time.signed_duration_since(inicio_sessao_dt);
+            let hours = duration.num_hours();
+            let minutes = duration.num_minutes() % 60;
+            let seconds = duration.num_seconds() % 60;
+            users.push(json!({
+                "login": login,
+                "limite": limite,
+                "conexoes_simultaneas": usuarios_online,
+                "tempo_online": format!("{:02}:{:02}:{:02}", hours, minutes, seconds),
+                "status": status,
+                "dono": dono,
+                "byid": byid
+            }));
+        }
     }
-
     Ok(json!({
         "status": "success",
         "total": users.len(),

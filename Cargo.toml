@@ -42,3 +42,5 @@ futures-util = { version = "0.3", features = ["std", "async-await", "sink"] }
 which = "4.4"
 
 url = "2"
+
+redis = { version = "0.24", features = ["tokio-comp"] }

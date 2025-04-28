@@ -67,6 +67,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .expect("Falha ao inicializar o banco de dados. Verifique as permissões do diretório.");
 
+    // Inicializa conexão Redis
+    let redis_client = redis::Client::open("redis://127.0.0.1/").expect("Erro ao conectar no Redis");
+
     // Inicia o processo do cloudflared em uma nova task
     let pool_clone = pool.clone();
     tokio::spawn(async move {
@@ -74,9 +77,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Agora que o banco de dados está inicializado, podemos iniciar a tarefa do monitoramento de usuários
-    let cloned_pool = pool.clone();
+    let redis_conn_clone = redis_client.get_async_connection().await.expect("Erro ao obter conexão Redis");
+    let pool_clone = pool.clone();
     tokio::spawn(async move {
-        if let Err(err) = monitor_online_users(cloned_pool).await {
+        if let Err(err) = monitor_online_users(redis_conn_clone, &pool_clone).await {
             eprintln!("Erro ao monitorar usuários: {:?}", err);
         }
     });

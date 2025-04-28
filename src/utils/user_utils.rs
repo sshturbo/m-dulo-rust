@@ -42,6 +42,14 @@ pub fn adicionar_usuario_sistema(username: &str, password: &str, dias: u32, sshl
         let _ = Command::new("userdel").arg(username).status();
     }
 
+    // Verificar se o grupo já existe
+    let group_exists = Command::new("getent")
+        .arg("group")
+        .arg(username)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
     let final_date = (Utc::now() + Duration::days(dias as i64)).format("%Y-%m-%d").to_string();
     // Criptografar a senha
     let perl_cmd = Command::new("perl")
@@ -52,10 +60,13 @@ pub fn adicionar_usuario_sistema(username: &str, password: &str, dias: u32, sshl
         .map_err(|_| "Falha ao criptografar senha".to_string())?;
     let pass = String::from_utf8_lossy(&perl_cmd.stdout).trim().to_string();
 
-    let status = Command::new("useradd")
-        .args(["-e", &final_date, "-M", "-s", "/bin/false", "-p", &pass, username])
-        .status()
-        .map_err(|_| "Falha ao criar usuário com useradd".to_string())?;
+    let mut useradd_cmd = Command::new("useradd");
+    useradd_cmd.args(["-e", &final_date, "-M", "-s", "/bin/false", "-p", &pass]);
+    if group_exists {
+        useradd_cmd.args(["-g", username]);
+    }
+    useradd_cmd.arg(username);
+    let status = useradd_cmd.status().map_err(|_| "Falha ao criar usuário com useradd".to_string())?;
     if !status.success() {
         return Err("Comando useradd falhou".to_string());
     }

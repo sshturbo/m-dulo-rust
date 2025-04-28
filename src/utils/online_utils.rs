@@ -3,7 +3,7 @@ use std::io::{self, BufRead, Error};
 use std::process::Command;
 
 #[allow(dead_code)]
-pub fn get_users() -> Result<String, Error> {
+pub fn get_users() -> Result<Vec<String>, Error> {
     let mut user_list = Vec::new();
 
     // === SSH Users ===
@@ -44,8 +44,7 @@ pub fn get_users() -> Result<String, Error> {
         }
     }
 
-    // Converte a lista de usuários para uma string separada por vírgulas
-    Ok(user_list.join(","))
+    Ok(user_list)
 }
 
 #[allow(dead_code)]

@@ -17,7 +17,7 @@ use log::{info, error, warn};
 use std::future::Future;
 use crate::routes::criar::Database;
 
-const BATCH_SIZE: usize = 150;
+const BATCH_SIZE: usize = 50;
 const MAX_RETRIES: u32 = 3;
 const OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 const RETRY_DELAY: Duration = Duration::from_secs(1);

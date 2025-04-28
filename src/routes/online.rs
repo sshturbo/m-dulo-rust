@@ -1,20 +1,19 @@
-use crate::utils::online_utils::{get_users, execute_command};
-use sqlx::{PgPool, Error};
+use crate::utils::online_utils::get_users;
+use redis::AsyncCommands;
+use sqlx::PgPool;
 use std::time::Duration;
 use tokio::time::sleep;
 use log::error;
+use sqlx::Row;
 
-pub async fn monitor_online_users(pool: PgPool) -> Result<(), Error> {
+pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: &PgPool) -> Result<(), Box<dyn std::error::Error>> {
     loop {
         let start_time = std::time::Instant::now();
         let current_date = chrono::Local::now().naive_local();
 
-        // Primeiro, obtem a lista de usuários do sistema
-        if let Ok(users) = get_users() {
-            let user_list: Vec<&str> = users.split(',').collect();
+        // Obtem a lista de usuários do sistema
+        if let Ok(user_list) = get_users() {
             let mut user_count = std::collections::HashMap::new();
-
-            // Conta os usuários ativos
             for user in &user_list {
                 if user.trim().is_empty() {
                     continue;
@@ -22,103 +21,54 @@ pub async fn monitor_online_users(pool: PgPool) -> Result<(), Error> {
                 *user_count.entry(user.to_string()).or_insert(0) += 1;
             }
 
-            // Primeiro marca todos como Off
-            sqlx::query("UPDATE online SET status = 'Off'")
-                .execute(&pool)
-                .await?;
+            // Marca todos como Off no Redis
+            let online_users: Vec<String> = redis_conn.smembers("online_users").await.unwrap_or_default();
+            for login in &online_users {
+                let _: () = redis_conn.hset(format!("online:{}", login), "status", "Off").await?;
+            }
 
-            // Depois atualiza apenas os que estão online
+            // Atualiza apenas os que estão online
             for user in &user_list {
                 if !user.trim().is_empty() {
-                    sqlx::query("UPDATE online SET status = 'On' WHERE login = $1")
-                        .bind(user.trim())
-                        .execute(&pool)
-                        .await?;
+                    let _: () = redis_conn.hset(format!("online:{}", user), "status", "On").await?;
+                    let _: () = redis_conn.sadd("online_users", user).await?;
                 }
             }
 
-            // Remove usuários que não estão mais online
-            sqlx::query("DELETE FROM online WHERE status = 'Off'")
-                .execute(&pool)
-                .await?;
+            // Remove usuários que não estão mais online do set
+            let online_users: Vec<String> = redis_conn.smembers("online_users").await.unwrap_or_default();
+            for login in &online_users {
+                let status: String = redis_conn.hget(format!("online:{}", login), "status").await.unwrap_or("Off".to_string());
+                if status == "Off" {
+                    let _: () = redis_conn.srem("online_users", login).await?;
+                }
+            }
 
-            // Atualiza ou insere usuários online
+            // Atualiza ou insere usuários online no Redis
             for (user, count) in &user_count {
                 if user.is_empty() {
                     continue;
                 }
-
-                match sqlx::query_as::<_, (i64, String, i64, i64, i32)>(
-                    "SELECT byid, login, dias, limite, byid FROM users WHERE login = $1"
-                )
-                .bind(user)
-                .fetch_optional(&pool)
-                .await
-                {
-                    Ok(Some((_id, login, dias, limite, byid))) => {
-                        let expiry_date = chrono::Local::now() + chrono::Duration::days(dias);
-
-                        if current_date > expiry_date.naive_local() {
-                            execute_command("pkill", &["-u", &login]).unwrap();
-                            execute_command("userdel", &[&login]).unwrap();
-                            sqlx::query("UPDATE users SET suspenso = 'sim' WHERE login = $1")
-                                .bind(&login)
-                                .execute(&pool)
-                                .await?;
-                            continue;
-                        }
-
-                        match sqlx::query_as::<_, (i64, i64)>(
-                            "SELECT usuarios_online, limite FROM online WHERE login = $1"
-                        )
-                        .bind(&login)
-                        .fetch_optional(&pool)
-                        .await {
-                            Ok(Some((usuarios_online, limite_atual))) => {
-                                if limite_atual != limite || usuarios_online != *count {
-                                    sqlx::query(
-                                        "UPDATE online SET \
-                                        limite = $1, \
-                                        usuarios_online = $2,\
-                                        status = 'On'\
-                                        WHERE login = $3"
-                                    )
-                                    .bind(limite)
-                                    .bind(*count)
-                                    .bind(&login)
-                                    .execute(&pool)
-                                    .await?;
-                                }
-
-                                if usuarios_online > limite_atual {
-                                    execute_command("pkill", &["-u", &login]).unwrap();
-                                }
-                            },
-                            Ok(None) => {
-                                sqlx::query(
-                                    "INSERT INTO online (login, limite, usuarios_online, inicio_sessao, status, byid)
-                                     VALUES ($1, $2, $3, $4, 'On', $5)"
-                                )
-                                .bind(&login)
-                                .bind(limite)
-                                .bind(*count)
-                                .bind(current_date.format("%d/%m/%Y %H:%M:%S").to_string())
-                                .bind(byid)
-                                .execute(&pool)
-                                .await?;
-                            },
-                            Err(e) => {
-                                error!("Erro ao executar query SELECT para usuário '{}': {}", user, e);
-                            }
-                        }
-                    },
-                    Ok(None) => {
-                        error!("Usuário '{}' não encontrado no banco de dados", user);
-                    },
-                    Err(e) => {
-                        error!("Erro ao executar query SELECT para usuário '{}': {}", user, e);
-                    }
-                }
+                // Buscar dono e byid do banco usando sqlx::query
+                let row = sqlx::query("SELECT dono, byid FROM users WHERE login = $1")
+                    .bind(user)
+                    .fetch_optional(pool)
+                    .await?;
+                let (dono, byid) = if let Some(row) = row {
+                    (row.try_get::<String, _>("dono").unwrap_or_default(), row.try_get::<i32, _>("byid").unwrap_or(0))
+                } else {
+                    (String::new(), 0)
+                };
+                let _: () = redis_conn.hset_multiple(
+                    format!("online:{}", user),
+                    &[
+                        ("usuarios_online", count.to_string().as_str()),
+                        ("status", "On"),
+                        ("inicio_sessao", &current_date.format("%d/%m/%Y %H:%M:%S").to_string()),
+                        ("dono", &dono),
+                        ("byid", &byid.to_string()),
+                    ]
+                ).await?;
             }
         } else {
             error!("Falha ao obter usuários.");
