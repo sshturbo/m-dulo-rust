@@ -402,13 +402,23 @@ async fn handle_message(text: &str, db: Database, pool: &PgPool) -> Result<Strin
             if user.tipo != "v2ray" && user.tipo != "xray" {
                 return Err(WsHandlerError::DadosUsuarioInvalidos);
             }
-            criar_usuario(db.clone(), &pool, user).await?;
-            Ok("Usuário criado com sucesso!".to_string())
+            let db = db.clone();
+            let pool = pool.clone();
+            tokio::spawn(async move {
+                if let Err(e) = criar_usuario(db, &pool, user).await {
+                    log::error!("Erro ao criar usuário em background: {:?}", e);
+                }
+            });
+            Ok("Usuário em processamento!".to_string())
         },
         "EXCLUIR" => {
             let delete_req: DeleteRequest = serde_json::from_str(dados)
                 .map_err(|_| WsHandlerError::DadosExclusaoInvalidos)?;
-            excluir_usuario(Path((delete_req.usuario, delete_req.uuid)), State(pool.clone())).await.map_err(WsHandlerError::ExcluirUsuario)
+            let pool = pool.clone();
+            tokio::spawn(async move {
+                let _ = excluir_usuario(Path((delete_req.usuario, delete_req.uuid)), State(pool)).await;
+            });
+            Ok("Exclusão de usuário em processamento!".to_string())
         },
         "EXCLUIR_GLOBAL" => {
             let excluir_global_req: ExcluirGlobalRequest = serde_json::from_str(dados)
@@ -416,9 +426,8 @@ async fn handle_message(text: &str, db: Database, pool: &PgPool) -> Result<Strin
             let pool_clone = pool.clone();
             tokio::spawn(async move {
                 let _ = excluir_global(pool_clone, excluir_global_req).await;
-                // Aqui você pode adicionar logs ou notificações se quiser
             });
-            Ok("Processo de exclusão iniciado em segundo plano!".to_string())
+            Ok("Processo de exclusão global iniciado em segundo plano!".to_string())
         },
         "SINCRONIZAR" => {
             let usuarios: Vec<User> = serde_json::from_str(dados)
@@ -426,42 +435,35 @@ async fn handle_message(text: &str, db: Database, pool: &PgPool) -> Result<Strin
             if usuarios.iter().any(|u| u.tipo != "v2ray" && u.tipo != "xray") {
                 return Err(WsHandlerError::DadosUsuarioInvalidos);
             }
-
-            // Incrementa o contador de sincronizações ativas
-            ACTIVE_SYNCS.fetch_add(1, Ordering::SeqCst);
-            
-            // Envia status inicial
-            let _ = SYNC_CHANNEL.0.send(SyncProgress {
-                total: usuarios.len(),
-                processed: 0,
-                errors: Vec::new(),
-                status: "Iniciando sincronização".to_string(),
+            let db = db.clone();
+            let pool = pool.clone();
+            let usuarios_clone = usuarios.clone();
+            tokio::spawn(async move {
+                ACTIVE_SYNCS.fetch_add(1, Ordering::SeqCst);
+                let _ = SYNC_CHANNEL.0.send(SyncProgress {
+                    total: usuarios_clone.len(),
+                    processed: 0,
+                    errors: Vec::new(),
+                    status: "Iniciando sincronização".to_string(),
+                });
+                let result = sincronizar_usuarios(db, &pool, usuarios_clone).await;
+                ACTIVE_SYNCS.fetch_sub(1, Ordering::SeqCst);
+                let _ = SYNC_CHANNEL.0.send(SyncProgress {
+                    total: usuarios.len(),
+                    processed: usuarios.len(),
+                    errors: if let Err(ref e) = result {
+                        vec![e.to_string()]
+                    } else {
+                        Vec::new()
+                    },
+                    status: if result.is_ok() {
+                        "Sincronização concluída".to_string()
+                    } else {
+                        "Sincronização falhou".to_string()
+                    },
+                });
             });
-
-            // Processa a sincronização
-            let result = sincronizar_usuarios(db, pool, usuarios.clone()).await;
-
-            // Decrementa o contador de sincronizações ativas
-            ACTIVE_SYNCS.fetch_sub(1, Ordering::SeqCst);
-
-            // Envia status final
-            let _ = SYNC_CHANNEL.0.send(SyncProgress {
-                total: usuarios.len(),
-                processed: usuarios.len(),
-                errors: if let Err(ref e) = result {
-                    vec![e.to_string()]
-                } else {
-                    Vec::new()
-                },
-                status: if result.is_ok() {
-                    "Sincronização concluída".to_string()
-                } else {
-                    "Sincronização falhou".to_string()
-                },
-            });
-
-            result.map_err(WsHandlerError::SincronizarUsuarios)?;
-            Ok("Sincronização iniciada com sucesso, em segundo plano!".to_string())
+            Ok("Sincronização iniciada em segundo plano!".to_string())
         },
         "EDITAR" => {
             let edit_req: EditRequest = serde_json::from_str(dados)
@@ -469,8 +471,12 @@ async fn handle_message(text: &str, db: Database, pool: &PgPool) -> Result<Strin
             if edit_req.tipo != "v2ray" && edit_req.tipo != "xray" {
                 return Err(WsHandlerError::DadosUsuarioInvalidos);
             }
-            editar_usuario(db, pool, edit_req).await.map_err(WsHandlerError::EditarUsuario)?;
-            Ok("Usuário editado com sucesso!".to_string())
+            let db = db.clone();
+            let pool = pool.clone();
+            tokio::spawn(async move {
+                let _ = editar_usuario(db, &pool, edit_req).await;
+            });
+            Ok("Edição de usuário em processamento!".to_string())
         },
         _ => Err(WsHandlerError::FormatoInvalido)
     }
