@@ -42,8 +42,6 @@ pub fn get_users() -> Result<String, Error> {
                 }
             }
         }
-    } else {
-        eprintln!("Arquivo /etc/openvpn/openvpn-status.log não encontrado ou inacessível.");
     }
 
     // Converte a lista de usuários para uma string separada por vírgulas
