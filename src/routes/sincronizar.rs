@@ -17,7 +17,7 @@ use log::{info, error, warn};
 use std::future::Future;
 use crate::routes::criar::Database;
 
-const BATCH_SIZE: usize = 50;
+const BATCH_SIZE: usize = 20;
 const MAX_RETRIES: u32 = 3;
 const OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 const RETRY_DELAY: Duration = Duration::from_secs(1);
@@ -236,6 +236,8 @@ async fn processar_usuarios_em_lotes(
                 }
             }
         }
+        // Adiciona um pequeno delay entre os lotes
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }
     // Atualiza configurações do Xray e V2Ray em paralelo
     let (xray_result, v2ray_result) = tokio::join!(

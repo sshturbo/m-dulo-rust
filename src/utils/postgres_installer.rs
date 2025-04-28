@@ -16,6 +16,8 @@ pub async fn instalar_postgres() -> Result<(), String> {
             error!("Erro ao criar banco/usuário: {}", e);
             return Err(e);
         }
+        // Instala o Redis se necessário
+        instalar_redis()?;
         return Ok(());
     }
 
@@ -42,6 +44,8 @@ pub async fn instalar_postgres() -> Result<(), String> {
                 error!("Erro ao criar banco/usuário: {}", e);
                 return Err(e);
             }
+            // Instala o Redis se necessário
+            instalar_redis()?;
             Ok(())
         },
         Ok(s) => {
@@ -190,4 +194,38 @@ pub async fn criar_banco_usuario_url() -> Result<(), String> {
 
     info!("Usuário, banco e privilégios criados/configurados com sucesso!");
     Ok(())
+}
+
+fn instalar_redis() -> Result<(), String> {
+    info!("Verificando se o Redis está instalado...");
+    if which::which("redis-server").is_ok() {
+        info!("Redis já está instalado.");
+        return Ok(());
+    }
+    info!("Redis não encontrado, iniciando instalação...");
+    let status = Command::new("sudo")
+        .arg("apt-get").arg("install").arg("-y").arg("redis-server")
+        .status();
+    match status {
+        Ok(s) if s.success() => {
+            info!("Redis instalado com sucesso.");
+            // Habilita o serviço para iniciar automaticamente
+            let _ = Command::new("sudo")
+                .arg("systemctl").arg("enable").arg("redis-server")
+                .status();
+            // Inicia o serviço imediatamente
+            let _ = Command::new("sudo")
+                .arg("systemctl").arg("start").arg("redis-server")
+                .status();
+            Ok(())
+        },
+        Ok(s) => {
+            error!("Falha ao instalar Redis, código de saída: {}", s);
+            Err("Falha ao instalar Redis".into())
+        },
+        Err(e) => {
+            error!("Erro ao instalar Redis: {}", e);
+            Err("Erro ao instalar Redis".into())
+        }
+    }
 } 
