@@ -129,7 +129,7 @@ progress_bar 5
 cat > "$APP_DIR/config.json" <<EOF
 {
     "api_token": "$API_TOKEN",
-    "database_url": "postgres://postgres@localhost/mdulo",
+    "database_url": "postgres://mdulo:i92rG0WUo0D57oP@localhost/mdulo",
     "logs_enabled": true
 }
 EOF

@@ -2,6 +2,7 @@ use std::process::Command;
 use log::{info, error};
 use url::Url;
 use crate::config::Config;
+use std::fs;
 
 /// Instala o PostgreSQL usando o gerenciador de pacotes do sistema.
 pub async fn instalar_postgres() -> Result<(), String> {
@@ -54,8 +55,54 @@ pub async fn instalar_postgres() -> Result<(), String> {
     }
 }
 
-/// Garante que o serviço do PostgreSQL está rodando.
+fn get_postgres_port() -> Option<u16> {
+    let conf_path = "/etc/postgresql/14/main/postgresql.conf";
+    if let Ok(content) = fs::read_to_string(conf_path) {
+        for line in content.lines() {
+            let line = line.trim();
+            if line.starts_with("port") && !line.starts_with("#") {
+                if let Some(port_str) = line.split('=').nth(1) {
+                    let port = port_str.trim().split_whitespace().next().unwrap_or("");
+                    if let Ok(port_num) = port.parse::<u16>() {
+                        return Some(port_num);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn set_postgres_port_5432() -> Result<(), String> {
+    let conf_path = "/etc/postgresql/14/main/postgresql.conf";
+    let content = fs::read_to_string(conf_path).map_err(|e| format!("Erro ao ler postgresql.conf: {}", e))?;
+    let mut new_content = String::new();
+    let mut found = false;
+    for line in content.lines() {
+        if line.trim().starts_with("port") && !line.trim().starts_with("#") {
+            new_content.push_str("port = 5432\n");
+            found = true;
+        } else {
+            new_content.push_str(line);
+            new_content.push('\n');
+        }
+    }
+    if !found {
+        new_content.push_str("port = 5432\n");
+    }
+    fs::write(conf_path, new_content).map_err(|e| format!("Erro ao escrever postgresql.conf: {}", e))?;
+    info!("Porta do PostgreSQL ajustada para 5432 no postgresql.conf");
+    Ok(())
+}
+
+/// Garante que o serviço do PostgreSQL está rodando e loga a porta configurada.
 pub async fn iniciar_postgres() -> Result<(), String> {
+    let porta = get_postgres_port().unwrap_or(5432);
+    info!("Porta configurada no postgresql.conf: {}", porta);
+    if porta != 5432 {
+        info!("Atenção: o PostgreSQL está configurado para rodar na porta {} (não padrão). Alterando para 5432...", porta);
+        set_postgres_port_5432()?;
+    }
     info!("Iniciando serviço do PostgreSQL...");
     let status = Command::new("sudo")
         .arg("service").arg("postgresql").arg("start")
