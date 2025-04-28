@@ -1,4 +1,4 @@
-use sqlx::{Pool, Sqlite};
+use sqlx::PgPool;
 use std::process::Command;
 use crate::models::user::User;
 use crate::models::edit::EditRequest;
@@ -7,7 +7,6 @@ use tokio::sync::Mutex;
 use std::sync::Arc;
 use crate::utils::user_utils::{process_user_data, remover_uuid_v2ray, remover_uuids_xray, atualizar_email_xray, atualizar_email_v2ray, adicionar_usuario_sistema, atualizar_uuid_xray, atualizar_uuid_v2ray};
 use thiserror::Error;
-use crate::utils::backup_utils::backup_database;
 
 pub type Database = Arc<Mutex<HashMap<String, User>>>;
 
@@ -27,12 +26,12 @@ pub enum EditarError {
 
 pub async fn editar_usuario(
     db: Database,
-    pool: &Pool<Sqlite>,
+    pool: &PgPool,
     edit_req: EditRequest
 ) -> Result<(), EditarError> {
     let mut db = db.lock().await;
 
-    let existing_user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE login = ?")
+    let existing_user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE login = $1")
         .bind(&edit_req.login_antigo)
         .fetch_optional(pool)
         .await
@@ -70,7 +69,7 @@ pub async fn editar_usuario(
         }
     }
 
-    let new_user_check = sqlx::query_as::<_, User>("SELECT * FROM users WHERE login = ?")
+    let new_user_check = sqlx::query_as::<_, User>("SELECT * FROM users WHERE login = $1")
         .bind(&edit_req.login_novo)
         .fetch_optional(pool)
         .await
@@ -105,16 +104,16 @@ pub async fn editar_usuario(
     };
 
     let result = sqlx::query(
-        "UPDATE users SET login = ?, senha = ?, dias = ?, limite = ?, uuid = ?, tipo = ?, dono = ?, byid = ? WHERE login = ?"
+        "UPDATE users SET login = $1, senha = $2, dias = $3, limite = $4, uuid = $5, tipo = $6, dono = $7, byid = $8 WHERE login = $9"
     )
     .bind(&new_user.login)
     .bind(&new_user.senha)
-    .bind(new_user.dias as i64)
-    .bind(new_user.limite as i64)
+    .bind(new_user.dias as i32)
+    .bind(new_user.limite as i32)
     .bind(&new_user.uuid)
     .bind(&new_user.tipo)
     .bind(&new_user.dono)
-    .bind(new_user.byid as i64)
+    .bind(new_user.byid as i32)
     .bind(&edit_req.login_antigo)
     .execute(pool)
     .await;
@@ -149,10 +148,6 @@ pub async fn editar_usuario(
                 } else if let (Some(uuid), "v2ray") = (uuid_antigo, tipo_antigo) {
                     let _ = atualizar_email_v2ray(uuid, &edit_req.login_novo);
                 }
-            }
-            // Backup do banco de dados após edição
-            if let Err(e) = backup_database("db/database.sqlite", "/opt/backup-mdulo", "database.sqlite") {
-                eprintln!("Erro ao fazer backup do banco de dados: {}", e);
             }
             Ok(())
         }

@@ -1,11 +1,10 @@
 use axum::extract::{Path, State};
-use sqlx::{Pool, Sqlite};
+use sqlx::PgPool;
 use std::process::Command;
 use log::{info, error};
 use crate::utils::restart_v2ray::reiniciar_v2ray;
 use thiserror::Error;
 use crate::utils::user_utils::{remover_uuids_xray, remover_uuid_v2ray};
-use crate::utils::backup_utils::backup_database;
 
 #[derive(Error, Debug)]
 pub enum ExcluirError {
@@ -17,7 +16,7 @@ pub enum ExcluirError {
 
 pub async fn excluir_usuario(
     Path((usuario, uuid)): Path<(String, Option<String>)>,
-    State(pool): State<Pool<Sqlite>>,
+    State(pool): State<PgPool>,
 ) -> Result<String, ExcluirError> {
     info!("Tentativa de exclusão do usuário {}", usuario);
 
@@ -29,22 +28,19 @@ pub async fn excluir_usuario(
     if !output.status.success() {
         error!("Usuário {} não encontrado no sistema, excluindo do banco de dados", usuario);
 
-        sqlx::query("DELETE FROM users WHERE login = ?")
+        sqlx::query("DELETE FROM users WHERE login = $1")
             .bind(&usuario)
             .execute(&pool)
             .await
             .map_err(|e| ExcluirError::ExcluirUsuarioBanco(e.to_string()))?;
 
         info!("Usuário {} excluído com sucesso", usuario);
-        // Backup do banco de dados após exclusão
-        if let Err(e) = backup_database("db/database.sqlite", "/opt/backup-mdulo", "database.sqlite") {
-            error!("Erro ao fazer backup do banco de dados: {}", e);
-        }
+
         return Ok("Usuário excluído com sucesso".to_string());
     }
 
     // Buscar o tipo do usuário no banco
-    let tipo: Option<String> = sqlx::query_scalar("SELECT tipo FROM users WHERE login = ?")
+    let tipo: Option<String> = sqlx::query_scalar("SELECT tipo FROM users WHERE login = $1")
         .bind(&usuario)
         .fetch_optional(&pool)
         .await
@@ -77,17 +73,14 @@ pub async fn excluir_usuario(
         .status()
         .map_err(|_| ExcluirError::FalhaComando)?;
 
-    sqlx::query("DELETE FROM users WHERE login = ?")
+    sqlx::query("DELETE FROM users WHERE login = $1")
         .bind(&usuario)
         .execute(&pool)
         .await
         .map_err(|e| ExcluirError::ExcluirUsuarioBanco(e.to_string()))?;
 
     info!("Usuário {} excluído com sucesso", usuario);
-    // Backup do banco de dados após exclusão
-    if let Err(e) = backup_database("db/database.sqlite", "/opt/backup-mdulo", "database.sqlite") {
-        error!("Erro ao fazer backup do banco de dados: {}", e);
-    }
+
     Ok("Usuário excluído com sucesso".to_string())
 }
 

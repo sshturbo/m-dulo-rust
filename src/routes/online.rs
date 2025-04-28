@@ -1,11 +1,10 @@
 use crate::utils::online_utils::{get_users, execute_command};
-use sqlx::{Pool, Sqlite};
+use sqlx::{PgPool, Error};
 use std::time::Duration;
 use tokio::time::sleep;
-use sqlx::Error;
 use log::error;
 
-pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
+pub async fn monitor_online_users(pool: PgPool) -> Result<(), Error> {
     loop {
         let start_time = std::time::Instant::now();
         let current_date = chrono::Local::now().naive_local();
@@ -31,7 +30,7 @@ pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
             // Depois atualiza apenas os que estão online
             for user in &user_list {
                 if !user.trim().is_empty() {
-                    sqlx::query("UPDATE online SET status = 'On' WHERE login = ?")
+                    sqlx::query("UPDATE online SET status = 'On' WHERE login = $1")
                         .bind(user.trim())
                         .execute(&pool)
                         .await?;
@@ -50,7 +49,7 @@ pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
                 }
 
                 match sqlx::query_as::<_, (i64, String, i64, i64, i32)>(
-                    "SELECT byid, login, dias, limite, byid FROM users WHERE login = ?"
+                    "SELECT byid, login, dias, limite, byid FROM users WHERE login = $1"
                 )
                 .bind(user)
                 .fetch_optional(&pool)
@@ -62,7 +61,7 @@ pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
                         if current_date > expiry_date.naive_local() {
                             execute_command("pkill", &["-u", &login]).unwrap();
                             execute_command("userdel", &[&login]).unwrap();
-                            sqlx::query("UPDATE users SET suspenso = 'sim' WHERE login = ?")
+                            sqlx::query("UPDATE users SET suspenso = 'sim' WHERE login = $1")
                                 .bind(&login)
                                 .execute(&pool)
                                 .await?;
@@ -70,7 +69,7 @@ pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
                         }
 
                         match sqlx::query_as::<_, (i64, i64)>(
-                            "SELECT usuarios_online, limite FROM online WHERE login = ?"
+                            "SELECT usuarios_online, limite FROM online WHERE login = $1"
                         )
                         .bind(&login)
                         .fetch_optional(&pool)
@@ -78,11 +77,11 @@ pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
                             Ok(Some((usuarios_online, limite_atual))) => {
                                 if limite_atual != limite || usuarios_online != *count {
                                     sqlx::query(
-                                        "UPDATE online SET 
-                                        limite = ?, 
-                                        usuarios_online = ?,
-                                        status = 'On'
-                                        WHERE login = ?"
+                                        "UPDATE online SET \
+                                        limite = $1, \
+                                        usuarios_online = $2,\
+                                        status = 'On'\
+                                        WHERE login = $3"
                                     )
                                     .bind(limite)
                                     .bind(*count)
@@ -98,7 +97,7 @@ pub async fn monitor_online_users(pool: Pool<Sqlite>) -> Result<(), Error> {
                             Ok(None) => {
                                 sqlx::query(
                                     "INSERT INTO online (login, limite, usuarios_online, inicio_sessao, status, byid)
-                                     VALUES (?, ?, ?, ?, 'On', ?)"
+                                     VALUES ($1, $2, $3, $4, 'On', $5)"
                                 )
                                 .bind(&login)
                                 .bind(limite)

@@ -129,7 +129,8 @@ progress_bar 5
 cat > "$APP_DIR/config.json" <<EOF
 {
     "api_token": "$API_TOKEN",
-    "database_url": "db/database.sqlite"
+    "database_url": "postgres://postgres@localhost/mdulo",
+    "logs_enabled": true
 }
 EOF
 chmod -R 775 $APP_DIR

@@ -1,11 +1,10 @@
 use crate::models::user::User;
-use sqlx::{Pool, Sqlite};
+use sqlx::PgPool;
 use std::collections::HashMap;
 use tokio::sync::Mutex;
 use std::sync::Arc;
 use crate::utils::user_utils::process_user_data;
 use thiserror::Error;
-use crate::utils::backup_utils::backup_database;
 
 pub type Database = Arc<Mutex<HashMap<String, User>>>;
 
@@ -21,10 +20,10 @@ pub enum CriarError {
     ProcessarDadosUsuario,
 }
 
-pub async fn criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Result<(), CriarError> { 
+pub async fn criar_usuario(db: Database, pool: &PgPool, user: User) -> Result<(), CriarError> {
     let mut db = db.lock().await;
 
-    let existing_user = sqlx::query_scalar::<_, String>("SELECT login FROM users WHERE login = ?")
+    let existing_user = sqlx::query_scalar::<_, String>("SELECT login FROM users WHERE login = $1")
         .bind(&user.login)
         .fetch_optional(pool)
         .await
@@ -35,16 +34,16 @@ pub async fn criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Res
     }
 
     sqlx::query(
-        "INSERT INTO users (login, senha, dias, limite, uuid, tipo, dono, byid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)" 
+        "INSERT INTO users (login, senha, dias, limite, uuid, tipo, dono, byid) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
     )
     .bind(&user.login)
     .bind(&user.senha)
-    .bind(user.dias as i64)
-    .bind(user.limite as i64)
+    .bind(user.dias as i32)
+    .bind(user.limite as i32)
     .bind(&user.uuid)
     .bind(&user.tipo)
     .bind(&user.dono)
-    .bind(user.byid as i64)
+    .bind(user.byid as i32)
     .execute(pool)
     .await
     .map_err(|e| CriarError::InserirUsuario(e.to_string()))?;
@@ -53,10 +52,6 @@ pub async fn criar_usuario(db: Database, pool: &Pool<Sqlite>, user: User) -> Res
     println!("Usuário criado com sucesso!");
     process_user_data(user).await.map_err(|_| CriarError::ProcessarDadosUsuario)?;
 
-    // Backup do banco de dados
-    if let Err(e) = backup_database("db/database.sqlite", "/opt/backup-mdulo", "database.sqlite") {
-        eprintln!("Erro ao fazer backup do banco de dados: {}", e);
-    }
     
     Ok(())
 }

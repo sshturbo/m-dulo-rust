@@ -16,11 +16,12 @@ mod routes {
 mod ws_handler; 
 mod db;
 mod utils {
+    pub mod logging;
     pub mod restart_v2ray;
     pub mod restart_xray;
     pub mod user_utils;
     pub mod online_utils;
-    pub mod backup_utils;
+    pub mod postgres_installer;
 }
 mod config;
 
@@ -31,39 +32,36 @@ use axum::{
 use tokio::net::TcpListener;
 use crate::db::initialize_db;
 use crate::ws_handler::handler::{websocket_handler, websocket_online_handler, websocket_sync_status_handler, websocket_domain_handler};
-use env_logger::Env; 
 use std::sync::Arc;
 use std::collections::HashMap;
 use crate::routes::criar::Database;
 use tokio::sync::Mutex;
 use axum::Extension; 
 use crate::routes::online::monitor_online_users;
-use crate::utils::backup_utils::restore_backup;
-use std::path::Path;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Restaurar backup do banco de dados, se existir
-    let backup_path = "/opt/backup-mdulo/database.sqlite";
-    let db_dir = "db";
-    let db_file = "database.sqlite";
-
-    match restore_backup(backup_path, db_dir, db_file) {
-        Ok(_) => {
-            if Path::new(backup_path).exists() {
-                println!("✅ Backup do banco de dados restaurado com sucesso!");
-            } else {
-                println!("Nenhum backup encontrado em {}", backup_path);
-            }
-        },
-        Err(e) => eprintln!("Erro ao restaurar backup do banco de dados: {}", e),
-    }
-
     // Carregar configuração do config.json
     config::Config::load_from_file("config.json");
-    // Inicializa o logger com o filtro de log configurado
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
-    
+
+    // Ativa/desativa logs conforme config
+    if let Some(false) = config::Config::get().logs_enabled {
+        utils::logging::disable_logs();
+    } else {
+        utils::logging::enable_logs();
+    }
+    utils::logging::init_logging();
+
+    // Instala e inicia o PostgreSQL antes de qualquer coisa
+    if let Err(e) = utils::postgres_installer::instalar_postgres().await {
+        eprintln!("Erro ao instalar PostgreSQL: {}", e);
+        return Ok(());
+    }
+    if let Err(e) = utils::postgres_installer::iniciar_postgres().await {
+        eprintln!("Erro ao iniciar PostgreSQL: {}", e);
+        return Ok(());
+    }
+
     // Inicializa o banco de dados antes de qualquer outra coisa
     let pool = initialize_db()
         .await

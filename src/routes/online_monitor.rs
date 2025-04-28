@@ -1,4 +1,4 @@
-use sqlx::{Pool, Sqlite, Error};
+use sqlx::{PgPool, Error};
 use chrono::{NaiveDateTime, Local};
 use serde_json::json;
 use log::error;
@@ -14,7 +14,7 @@ struct OnlineUser {
     byid: i64
 }
 
-pub async fn monitor_users(pool: Pool<Sqlite>) -> Result<serde_json::Value, Error> {
+pub async fn monitor_users(pool: PgPool) -> Result<serde_json::Value, Error> {
     let rows = sqlx::query_as::<_, OnlineUser>(
         "SELECT o.login, o.limite, o.inicio_sessao, o.usuarios_online, o.status, u.dono, u.byid
          FROM online o

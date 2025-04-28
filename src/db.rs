@@ -1,32 +1,22 @@
-use sqlx::{Pool, Sqlite, SqlitePool};
+use sqlx::PgPool;
+use sqlx::postgres::PgPoolOptions;
 use crate::config::Config;
-use std::fs;
-use std::path::Path;
 use log::{info, error};
 
-pub async fn initialize_db() -> Result<Pool<Sqlite>, sqlx::Error> {
-    // Obter caminho do banco de dados do config.json
+pub async fn initialize_db() -> Result<PgPool, sqlx::Error> {
+    // Obter string de conexão do config.json
     let database_url = &Config::get().database_url;
 
-    // Criar diretório se não existir
-    let db_dir = Path::new("db");
-    if !db_dir.exists() {
-        fs::create_dir_all(db_dir).expect("Falha ao criar diretório para o banco");
-    }
-
-    // Criar o arquivo do banco de dados, se não existir
-    let db_path = Path::new(database_url);
-    if !db_path.exists() {
-        fs::File::create(db_path).expect("Falha ao criar arquivo do banco de dados");
-    }
-
-    // Conectar ao banco de dados
-    let pool = SqlitePool::connect(database_url).await?;
+    // Conectar ao banco de dados PostgreSQL
+    let pool = PgPoolOptions::new()
+        .max_connections(10)
+        .connect(database_url)
+        .await?;
 
     // Criar tabelas, se não existirem
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             login TEXT NOT NULL UNIQUE,
             senha TEXT NOT NULL,
             dias INTEGER NOT NULL,
@@ -36,28 +26,28 @@ pub async fn initialize_db() -> Result<Pool<Sqlite>, sqlx::Error> {
             suspenso TEXT DEFAULT 'não',
             dono TEXT DEFAULT 'admin',
             byid INTEGER NOT NULL
-        )",
+        )"
     )
     .execute(&pool)
     .await?;
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS online (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             byid INTEGER NOT NULL,
             login TEXT NOT NULL UNIQUE,
             limite INTEGER NOT NULL,
             usuarios_online INTEGER DEFAULT 0,
             inicio_sessao TEXT NOT NULL,
             status TEXT DEFAULT 'On'
-        )",
+        )"
     )
     .execute(&pool)
     .await?;
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS dominio_cloudflare (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             subdominio TEXT NOT NULL
         )"
     )
@@ -68,7 +58,7 @@ pub async fn initialize_db() -> Result<Pool<Sqlite>, sqlx::Error> {
 }
 
 // Função para salvar o subdomínio
-pub async fn salvar_subdominio(pool: &Pool<Sqlite>, subdominio: &str) -> Result<(), sqlx::Error> {
+pub async fn salvar_subdominio(pool: &PgPool, subdominio: &str) -> Result<(), sqlx::Error> {
     info!("Tentando salvar subdomínio: {}", subdominio);
 
     // Executa dentro de uma transação para garantir consistência
@@ -81,7 +71,7 @@ pub async fn salvar_subdominio(pool: &Pool<Sqlite>, subdominio: &str) -> Result<
 
     // Insere o novo registro
     let result = sqlx::query(
-        "INSERT INTO dominio_cloudflare (subdominio) VALUES (?)"
+        "INSERT INTO dominio_cloudflare (subdominio) VALUES ($1)"
     )
     .bind(subdominio)
     .execute(&mut *tx)
@@ -94,7 +84,7 @@ pub async fn salvar_subdominio(pool: &Pool<Sqlite>, subdominio: &str) -> Result<
     Ok(())
 }
 
-pub async fn buscar_subdominio(pool: &Pool<Sqlite>) -> Result<Option<String>, sqlx::Error> {
+pub async fn buscar_subdominio(pool: &PgPool) -> Result<Option<String>, sqlx::Error> {
     info!("Buscando subdomínio no banco...");
     
     let result = sqlx::query_scalar::<_, String>(

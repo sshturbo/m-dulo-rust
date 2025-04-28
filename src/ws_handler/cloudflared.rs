@@ -2,7 +2,7 @@ use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command as TokioCommand;
 use log::{info, error};
-use sqlx::{Pool, Sqlite};
+use sqlx::PgPool;
 use futures_util::StreamExt;
 use std::pin::Pin;
 use tokio_stream::wrappers::LinesStream;
@@ -67,7 +67,7 @@ async fn instalar_cloudflared() -> Result<(), String> {
     }
 }
 
-pub async fn start_cloudflared_process(pool: Pool<Sqlite>) {
+pub async fn start_cloudflared_process(pool: PgPool) {
     info!("Iniciando processo do cloudflared...");
 
     // Verifica se cloudflared está instalado

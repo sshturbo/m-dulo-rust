@@ -1,11 +1,10 @@
-use sqlx::{Pool, Sqlite};
+use sqlx::PgPool;
 use std::process::Command;
 use crate::models::delete_global::ExcluirGlobalRequest;
 use crate::utils::restart_v2ray::reiniciar_v2ray;
 use thiserror::Error;
 use std::fs;
 use serde_json::Value;
-use crate::utils::backup_utils::backup_database;
 use crate::utils::restart_xray::reiniciar_xray;
 
 #[derive(Error, Debug)]
@@ -23,14 +22,14 @@ pub enum ExcluirGlobalError {
 }
 
 pub async fn excluir_global(
-    pool: Pool<Sqlite>,
+    pool: PgPool,
     payload: ExcluirGlobalRequest,
 ) -> Result<(), ExcluirGlobalError> {
     let mut usuarios_existentes: Vec<String> = Vec::new();
 
     // Primeiro passo: Excluir usuários do sistema e banco de dados
     for usuario in &payload.usuarios {
-        let user_exists = sqlx::query("SELECT 1 FROM users WHERE login = ?")
+        let user_exists = sqlx::query("SELECT 1 FROM users WHERE login = $1")
             .bind(&usuario.usuario)
             .fetch_optional(&pool)
             .await
@@ -66,7 +65,7 @@ pub async fn excluir_global(
             .status()
             .map_err(|_| ExcluirGlobalError::ExcluirUsuario)?;
 
-        let _ = sqlx::query("DELETE FROM users WHERE login = ?")
+        let _ = sqlx::query("DELETE FROM users WHERE login = $1")
             .bind(&usuario)
             .execute(&pool)
             .await
@@ -176,10 +175,6 @@ pub async fn excluir_global(
         }
     }
 
-    // Backup do banco de dados após exclusão global
-    if let Err(e) = backup_database("db/database.sqlite", "/opt/backup-mdulo", "database.sqlite") {
-        eprintln!("Erro ao fazer backup do banco de dados: {}", e);
-    }
 
     Ok(())
 }

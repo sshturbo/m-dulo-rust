@@ -1,6 +1,6 @@
 use axum::extract::ws::{WebSocketUpgrade, WebSocket, Message};
 use axum::response::IntoResponse;
-use sqlx::{Pool, Sqlite};
+use sqlx::PgPool;
 use crate::routes::{
     excluir::excluir_usuario,
     excluir_global::excluir_global,
@@ -86,7 +86,7 @@ impl IntoResponse for CriarError {
 
 pub async fn websocket_handler(
     ws: WebSocketUpgrade,
-    pool: axum::extract::State<Pool<Sqlite>>,
+    pool: axum::extract::State<PgPool>,
 
 ) -> impl IntoResponse {
     let db: Database = Arc::new(Mutex::new(HashMap::new()));
@@ -95,7 +95,7 @@ pub async fn websocket_handler(
 
 pub async fn websocket_online_handler(
     ws: WebSocketUpgrade,
-    pool: axum::extract::State<Pool<Sqlite>>,
+    pool: axum::extract::State<PgPool>,
 
 ) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_online_socket(socket, pool.0))
@@ -103,7 +103,7 @@ pub async fn websocket_online_handler(
 
 pub async fn websocket_sync_status_handler(
     ws: WebSocketUpgrade,
-    pool: axum::extract::State<Pool<Sqlite>>,
+    pool: axum::extract::State<PgPool>,
 ) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_sync_status_socket(socket, pool.0))
 }
@@ -111,7 +111,7 @@ pub async fn websocket_sync_status_handler(
 // Handler para enviar o subdomínio Cloudflare via WebSocket
 pub async fn websocket_domain_handler(
     ws: WebSocketUpgrade,
-    State(pool): State<Pool<Sqlite>>,
+    State(pool): State<PgPool>,
 ) -> impl axum::response::IntoResponse {
     ws.on_upgrade(move |mut socket| async move {
         // Autenticação por token
@@ -181,7 +181,7 @@ pub async fn websocket_domain_handler(
 async fn handle_socket(
     mut socket: WebSocket,
     db: Database,
-    pool: Pool<Sqlite>,
+    pool: PgPool,
 ) {
     while let Some(Ok(msg)) = socket.recv().await {
         if let Message::Text(text) = msg {
@@ -196,7 +196,7 @@ async fn handle_socket(
 
 async fn handle_online_socket(
     mut socket: WebSocket,
-    pool: Pool<Sqlite>,
+    pool: PgPool,
 ) {
     info!("Cliente conectado ao WebSocket /online");
     
@@ -294,7 +294,7 @@ async fn handle_online_socket(
 
 async fn handle_sync_status_socket(
     mut socket: WebSocket,
-    _pool: Pool<Sqlite>, // Adicionando underscore para indicar que é intencional não usar a variável
+    _pool: PgPool, // Adicionando underscore para indicar que é intencional não usar a variável
 ) {
     info!("Cliente conectado ao WebSocket /sync-status");
     
@@ -382,7 +382,7 @@ async fn handle_sync_status_socket(
     info!("Conexão WebSocket /sync-status encerrada");
 }
 
-async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result<String, WsHandlerError> {
+async fn handle_message(text: &str, db: Database, pool: &PgPool) -> Result<String, WsHandlerError> {
     let parts: Vec<&str> = text.splitn(3, ':').collect();
     if parts.len() != 3 {
         return Err(WsHandlerError::FormatoInvalido);

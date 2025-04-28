@@ -17,12 +17,7 @@ tokio = { version = "1", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["io-util"] }
 
 # Banco de dados
-sqlx = { version = "0.7", features = [
-    "runtime-tokio-rustls",
-    "macros",
-    "migrate",
-    "sqlite"
-] }
+sqlx = { version = "0.7", features = ["runtime-tokio", "postgres", "macros"] }
 
 # Serialização
 serde = { version = "1.0", features = ["derive"] }

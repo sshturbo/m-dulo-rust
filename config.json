@@ -1,4 +1,5 @@
 {
-    "api_token": "SUA_API_TOKEN_AQUI",
-    "database_url": "db/database.sqlite"
-  }
+  "api_token": "SUA_API_KEY",
+  "database_url": "postgres://postgres@localhost/mdulo",
+  "logs_enabled": true
+}

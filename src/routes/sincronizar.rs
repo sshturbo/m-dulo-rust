@@ -1,5 +1,5 @@
 use crate::models::user::User;
-use sqlx::{Pool, Sqlite};
+use sqlx::PgPool;
 use std::collections::HashSet;
 use tokio::sync::{Mutex, broadcast};
 use std::sync::Arc;
@@ -16,7 +16,6 @@ use std::time::Duration;
 use log::{info, error, warn};
 use std::future::Future;
 use crate::routes::criar::Database;
-use crate::utils::backup_utils::backup_database;
 
 const BATCH_SIZE: usize = 150;
 const MAX_RETRIES: u32 = 3;
@@ -94,7 +93,7 @@ impl SyncStatus {
 }
 
 // Função principal que recebe a lista e inicia o processamento em background
-pub async fn sincronizar_usuarios(db: Database, pool: &Pool<Sqlite>, usuarios: Vec<User>) -> Result<String, SyncError> {
+pub async fn sincronizar_usuarios(db: Database, pool: &PgPool, usuarios: Vec<User>) -> Result<String, SyncError> {
     let pool = pool.clone();
     let usuarios_len = usuarios.len();
     
@@ -150,7 +149,7 @@ where
 // Função que processa os usuários em lotes
 async fn processar_usuarios_em_lotes(
     db: Database, 
-    pool: &Pool<Sqlite>, 
+    pool: &PgPool, 
     usuarios: Vec<User>,
     sync_status: Arc<Mutex<SyncStatus>>,
     config_cache: Arc<Mutex<ConfigCache>>
@@ -190,17 +189,25 @@ async fn processar_usuarios_em_lotes(
                         // 2. Insere no banco em transação
                         let mut transaction = pool.begin().await.map_err(|e| e.to_string())?;
                         sqlx::query(
-                            "INSERT OR REPLACE INTO users (login, senha, dias, limite, uuid, tipo, dono, byid) \
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                            "INSERT INTO users (login, senha, dias, limite, uuid, tipo, dono, byid) \
+                             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\
+                             ON CONFLICT (login) DO UPDATE SET \
+                                senha = EXCLUDED.senha,\
+                                dias = EXCLUDED.dias,\
+                                limite = EXCLUDED.limite,\
+                                uuid = EXCLUDED.uuid,\
+                                tipo = EXCLUDED.tipo,\
+                                dono = EXCLUDED.dono,\
+                                byid = EXCLUDED.byid"
                         )
                         .bind(&user.login)
                         .bind(&user.senha)
-                        .bind(user.dias as i64)
-                        .bind(user.limite as i64)
+                        .bind(user.dias as i32)
+                        .bind(user.limite as i32)
                         .bind(&user.uuid)
                         .bind(&user.tipo)
                         .bind(&user.dono)
-                        .bind(user.byid as i64)
+                        .bind(user.byid as i32)
                         .execute(&mut *transaction)
                         .await
                         .map_err(|e| e.to_string())?;
@@ -242,10 +249,6 @@ async fn processar_usuarios_em_lotes(
     if let Err(e) = v2ray_result {
         error!("Erro ao atualizar configurações V2Ray: {}", e);
         sync_status.lock().await.update(0, Some(e.to_string()));
-    }
-    // Backup do banco de dados após sincronização
-    if let Err(e) = backup_database("db/database.sqlite", "/opt/backup-mdulo", "database.sqlite") {
-        error!("Erro ao fazer backup do banco de dados: {}", e);
     }
     Ok(())
 }

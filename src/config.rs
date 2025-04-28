@@ -6,6 +6,7 @@ use once_cell::sync::OnceCell;
 pub struct Config {
     pub api_token: String,
     pub database_url: String,
+    pub logs_enabled: Option<bool>,
 }
 
 static CONFIG: OnceCell<Config> = OnceCell::new();
