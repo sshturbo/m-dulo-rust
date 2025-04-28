@@ -413,8 +413,12 @@ async fn handle_message(text: &str, db: Database, pool: &Pool<Sqlite>) -> Result
         "EXCLUIR_GLOBAL" => {
             let excluir_global_req: ExcluirGlobalRequest = serde_json::from_str(dados)
                 .map_err(|_| WsHandlerError::DadosExclusaoGlobalInvalidos)?;
-            excluir_global(pool.clone(), excluir_global_req).await.map_err(WsHandlerError::ExcluirGlobal)?;
-            Ok("Usuários excluídos com sucesso!".to_string())
+            let pool_clone = pool.clone();
+            tokio::spawn(async move {
+                let _ = excluir_global(pool_clone, excluir_global_req).await;
+                // Aqui você pode adicionar logs ou notificações se quiser
+            });
+            Ok("Processo de exclusão iniciado em segundo plano!".to_string())
         },
         "SINCRONIZAR" => {
             let usuarios: Vec<User> = serde_json::from_str(dados)
