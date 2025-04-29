@@ -57,6 +57,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("Erro ao instalar PostgreSQL: {}", e);
         return Ok(());
     }
+    // Aguarda o PostgreSQL do Docker ficar pronto
+    let database_url = &config::Config::get().database_url;
+    if let Err(e) = utils::postgres_installer::aguardar_postgres_pronto(database_url, 10, 2).await {
+        eprintln!("PostgreSQL não ficou pronto: {}", e);
+        return Ok(());
+    }
 
     // Inicializa o banco de dados antes de qualquer outra coisa
     let pool = initialize_db()

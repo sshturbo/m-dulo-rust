@@ -3,6 +3,8 @@ use log::{info, error};
 use url::Url;
 use crate::config::Config;
 use std::process::Stdio;
+use tokio::time::{sleep, Duration};
+use tokio_postgres::NoTls;
 
 /// Instala o Docker se necessário
 fn instalar_docker() -> Result<(), String> {
@@ -118,4 +120,21 @@ pub async fn instalar_postgres() -> Result<(), String> {
     subir_postgres_docker()?;
     subir_redis_docker()?;
     Ok(())
+}
+
+/// Aguarda até o PostgreSQL estar pronto para aceitar conexões
+pub async fn aguardar_postgres_pronto(database_url: &str, tentativas: u32, intervalo: u64) -> Result<(), String> {
+    for _ in 0..tentativas {
+        match tokio_postgres::connect(database_url, NoTls).await {
+            Ok((client, connection)) => {
+                drop(client);
+                drop(connection);
+                return Ok(());
+            }
+            Err(_) => {
+                sleep(Duration::from_secs(intervalo)).await;
+            }
+        }
+    }
+    Err("PostgreSQL não ficou pronto a tempo.".into())
 } 
