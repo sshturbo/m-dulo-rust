@@ -55,19 +55,30 @@ pub async fn excluir_global(
     }
 
     // Excluir usuários do sistema e banco de dados
-    for usuario in usuarios_existentes {
+    for usuario in &usuarios_existentes {
         let _ = Command::new("pkill")
-            .args(["-u", &usuario])
+            .args(["-u", usuario])
             .status();
 
         let _ = Command::new("userdel")
-            .arg(&usuario)
+            .arg(usuario)
             .status()
             .map_err(|_| ExcluirGlobalError::ExcluirUsuario)?;
+    }
 
-        let _ = sqlx::query("DELETE FROM users WHERE login = $1")
-            .bind(&usuario)
-            .execute(&pool)
+    // Exclui todos do banco em uma única query
+    if !usuarios_existentes.is_empty() {
+        let mut query = String::from("DELETE FROM users WHERE login IN (");
+        for (i, _) in usuarios_existentes.iter().enumerate() {
+            if i > 0 { query.push_str(","); }
+            query.push_str(&format!("${}", i+1));
+        }
+        query.push(')');
+        let mut sql = sqlx::query(&query);
+        for usuario in &usuarios_existentes {
+            sql = sql.bind(usuario);
+        }
+        sql.execute(&pool)
             .await
             .map_err(|_| ExcluirGlobalError::RemoverUsuarioBanco)?;
     }

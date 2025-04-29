@@ -57,10 +57,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("Erro ao instalar PostgreSQL: {}", e);
         return Ok(());
     }
-    if let Err(e) = utils::postgres_installer::iniciar_postgres().await {
-        eprintln!("Erro ao iniciar PostgreSQL: {}", e);
-        return Ok(());
-    }
 
     // Inicializa o banco de dados antes de qualquer outra coisa
     let pool = initialize_db()

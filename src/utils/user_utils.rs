@@ -50,7 +50,13 @@ pub fn adicionar_usuario_sistema(username: &str, password: &str, dias: u32, sshl
         .map(|s| s.success())
         .unwrap_or(false);
 
-    let final_date = (Utc::now() + Duration::days(dias as i64)).format("%Y-%m-%d").to_string();
+    // Lida com dias negativos ou vencidos
+    let dias = if dias as i64 <= 0 { 0 } else { dias };
+    let final_date = if dias == 0 {
+        Utc::now().format("%Y-%m-%d").to_string()
+    } else {
+        (Utc::now() + Duration::days(dias as i64)).format("%Y-%m-%d").to_string()
+    };
     // Criptografar a senha
     let perl_cmd = Command::new("perl")
         .arg("-e")
