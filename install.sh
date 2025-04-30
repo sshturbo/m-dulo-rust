@@ -130,7 +130,9 @@ cat > "$APP_DIR/config.json" <<EOF
 {
     "api_token": "$API_TOKEN",
     "database_url": "postgres://mdulo:i92rG0WUo0D57oP@localhost/mdulo",
-    "logs_enabled": true
+    "logs_enabled": true,
+    "cloudflare_api_key": "8dYdLfAIx_NxhVVk4-QjZJuDeRW_NGsShIzGYaYa",
+    "cloudflare_domain": "painelwebpro.com.br"
 }
 EOF
 chmod -R 775 $APP_DIR

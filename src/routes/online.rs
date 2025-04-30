@@ -44,25 +44,78 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                     _ => current_date.format("%d/%m/%Y %H:%M:%S").to_string(),
                 };
                 let mut fields: Vec<(&str, String)> = vec![
-                    ("status", "On".to_string()),
-                    ("inicio_sessao", inicio_sessao.clone()),
                     ("dono", dono.clone()),
                     ("byid", byid.to_string()),
                     ("limite", limite.to_string()),
+                    ("tipo", user.tipo.clone()),
                 ];
                 if user.tipo == "xray" {
                     let downlink = user.downlink.clone().unwrap_or_default();
                     let uplink = user.uplink.clone().unwrap_or_default();
-                    fields.push(("downlink", downlink));
-                    fields.push(("uplink", uplink));
+                    let saved_downlink: String = redis_conn.hget(&key, "downlink").await.unwrap_or("0".to_string());
+                    let saved_uplink: String = redis_conn.hget(&key, "uplink").await.unwrap_or("0".to_string());
+                    let saved_downlink_val: u64 = saved_downlink.parse().unwrap_or(0);
+                    let saved_uplink_val: u64 = saved_uplink.parse().unwrap_or(0);
+                    let downlink_val: u64 = downlink.parse().unwrap_or(0);
+                    let uplink_val: u64 = uplink.parse().unwrap_or(0);
+                    let mut no_change_count: u32 = redis_conn.hget(&key, "no_change_count").await.unwrap_or(0);
+                    let mut status = "On".to_string();
+                    let min_bytes = 1024; // 1KB
+                    let prev_status: String = redis_conn.hget(&key, "status").await.unwrap_or("Off".to_string());
+                    let mut inicio_sessao_val = redis_conn.hget(&key, "inicio_sessao").await.unwrap_or_else(|_| current_date.format("%d/%m/%Y %H:%M:%S").to_string());
+                    if (downlink_val > saved_downlink_val || uplink_val > saved_uplink_val)
+                        && (downlink_val > min_bytes || uplink_val > min_bytes)
+                    {
+                        // Houve tráfego novo e está acima do mínimo
+                        status = "On".to_string();
+                        no_change_count = 0;
+                        fields.push(("downlink", downlink.clone()));
+                        fields.push(("uplink", uplink.clone()));
+                        // Só atualiza inicio_sessao se estava Off antes
+                        if prev_status == "Off" {
+                            inicio_sessao_val = current_date.format("%d/%m/%Y %H:%M:%S").to_string();
+                        }
+                    } else {
+                        // Não houve tráfego novo ou está abaixo do mínimo
+                        no_change_count += 1;
+                        if no_change_count >= 4 {
+                            status = "Off".to_string();
+                        }
+                        // Mantém os valores antigos de downlink/uplink
+                        fields.push(("downlink", saved_downlink));
+                        fields.push(("uplink", saved_uplink));
+                    }
+                    fields.push(("status", status.clone()));
+                    fields.push(("no_change_count", no_change_count.to_string()));
+                    fields.push(("inicio_sessao", inicio_sessao_val.clone()));
+                    fields.push(("last_seen", chrono::Local::now().timestamp().to_string()));
+                    let fields_ref: Vec<(&str, &str)> = fields.iter().map(|(k, v)| (*k, v.as_str())).collect();
+                    let _: () = redis_conn.hset_multiple(&key, &fields_ref).await?;
+                    let _: () = redis_conn.sadd("online_users", &user.login).await?;
+                    // Remove imediatamente se ficou Off
+                    if status == "Off" {
+                        let _: () = redis_conn.del(&key).await?;
+                        let _: () = redis_conn.srem("online_users", &user.login).await?;
+                        continue; // Não conta para conexoes_simultaneas
+                    }
+                } else {
+                    // SSH/OpenVPN: lógica antiga
+                    fields.push(("status", "On".to_string()));
+                    fields.push(("inicio_sessao", inicio_sessao.clone()));
+                    let fields_ref: Vec<(&str, &str)> = fields.iter().map(|(k, v)| (*k, v.as_str())).collect();
+                    let _: () = redis_conn.hset_multiple(&key, &fields_ref).await?;
+                    let _: () = redis_conn.sadd("online_users", &user.login).await?;
                 }
-                let fields_ref: Vec<(&str, &str)> = fields.iter().map(|(k, v)| (*k, v.as_str())).collect();
-                let _: () = redis_conn.hset_multiple(&key, &fields_ref).await?;
-                let _: () = redis_conn.sadd("online_users", &user.login).await?;
-                // Atualiza usuarios_online para o login
+                // Atualiza usuarios_online para o login (apenas status On)
                 let pattern = format!("online:{}:*", user.login);
                 let keys: Vec<String> = redis_conn.keys(pattern).await.unwrap_or_default();
-                let usuarios_online = keys.len();
+                let mut usuarios_online = 0;
+                for k in &keys {
+                    let st: String = redis_conn.hget(k, "status").await.unwrap_or("Off".to_string());
+                    if st == "On" {
+                        usuarios_online += 1;
+                    }
+                }
                 let _: () = redis_conn.hset(&key, "usuarios_online", usuarios_online).await?;
 
                 let limite_usize = limite as usize;
@@ -71,6 +124,21 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                         .arg("-u")
                         .arg(&user.login)
                         .output();
+                }
+            }
+
+            // Timeout para Xray e cleanup geral: remove qualquer chave online:{login}:* não atualizada (last_seen > 4s)
+            let redis_online_users: Vec<String> = redis_conn.smembers("online_users").await.unwrap_or_default();
+            for login in &redis_online_users {
+                let pattern = format!("online:{}:*", login);
+                let keys: Vec<String> = redis_conn.keys(&pattern).await.unwrap_or_default();
+                for key in keys {
+                    let last_seen: i64 = redis_conn.hget(&key, "last_seen").await.unwrap_or(0);
+                    let now = chrono::Local::now().timestamp();
+                    if now - last_seen > 4 {
+                        let _: () = redis_conn.del(&key).await?;
+                        let _: () = redis_conn.srem("online_users", login).await?;
+                    }
                 }
             }
 

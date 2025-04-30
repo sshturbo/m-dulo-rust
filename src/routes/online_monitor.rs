@@ -28,7 +28,7 @@ pub async fn monitor_users(mut redis_conn: redis::aio::Connection) -> Result<ser
                 }
             }
             let inicio_sessao = map.get("inicio_sessao").cloned().unwrap_or_default();
-            let status = map.get("status").cloned().unwrap_or_else(|| if user.tipo == "xray" { "On".to_string() } else { "".to_string() });
+            let status = map.get("status").cloned().unwrap_or("".to_string());
             let limite = map.get("limite").and_then(|v| v.parse::<i64>().ok()).unwrap_or(0);
             let byid = map.get("byid").and_then(|v| v.parse::<i64>().ok()).unwrap_or(0);
             let dono = map.get("dono").cloned().unwrap_or_default();
