@@ -9,6 +9,8 @@ use std::fs;
 use serde::Deserialize;
 use rand::{distributions::Alphanumeric, Rng};
 use crate::db::buscar_subdominio;
+use std::path::Path;
+use std::fs::create_dir_all;
 
 /// Instala o cloudflared usando o método recomendado via repositório APT.
 #[allow(dead_code)]
@@ -87,6 +89,21 @@ pub async fn start_cloudflared_process(pool: PgPool) {
     // Exportar variável de ambiente
     std::env::set_var("CLOUDFLARE_API_TOKEN", &config.cloudflare_api_key);
 
+    // Copiar cert.pem da raiz do projeto para ~/.cloudflared/cert.pem
+    let home_dir = std::env::var("HOME").expect("HOME não definido");
+    let cloudflared_dir = format!("{}/.cloudflared", home_dir);
+    let cert_src = Path::new("cert.pem");
+    let cert_dst = Path::new(&cloudflared_dir).join("cert.pem");
+    if cert_src.exists() {
+        if !Path::new(&cloudflared_dir).exists() {
+            create_dir_all(&cloudflared_dir).expect("Falha ao criar ~/.cloudflared");
+        }
+        std::fs::copy(&cert_src, &cert_dst).expect("Falha ao copiar cert.pem para ~/.cloudflared/");
+        info!("cert.pem copiado para ~/.cloudflared/");
+    } else {
+        error!("cert.pem não encontrado na raiz do projeto!");
+    }
+
     // Verifica se já existe subdomínio/túnel salvo no banco
     let subdominio_salvo = buscar_subdominio(&pool).await.ok().flatten();
     let (tunnel_name, _full_domain) = if let Some(subdominio) = subdominio_salvo {
@@ -100,7 +117,7 @@ pub async fn start_cloudflared_process(pool: PgPool) {
             .take(8)
             .map(char::from)
             .collect();
-        let full_domain = format!("{}.{}", subdomain, config.cloudflare_domain);
+        let full_domain = format!("https://{}.{}", subdomain, config.cloudflare_domain);
         let tunnel_name = subdomain.clone();
 
         // Criar túnel autenticado
