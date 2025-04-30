@@ -47,28 +47,36 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                     ("dono", dono.clone()),
                     ("byid", byid.to_string()),
                     ("limite", limite.to_string()),
+                    ("usuarios_online", "1".to_string()),
                 ];
                 // Se for Xray, salva também downlink/uplink e faz dupla verificação
                 if user.tipo == "xray" {
                     let downlink = user.downlink.clone().unwrap_or_default();
                     let uplink = user.uplink.clone().unwrap_or_default();
-                    let prev_downlink: String = redis_conn.hget(format!("online:{}", user.login), "downlink").await.unwrap_or_default();
-                    let prev_downlink_prev: String = redis_conn.hget(format!("online:{}", user.login), "downlink_prev").await.unwrap_or_default();
-                    let prev_uplink: String = redis_conn.hget(format!("online:{}", user.login), "uplink").await.unwrap_or_default();
-                    let prev_uplink_prev: String = redis_conn.hget(format!("online:{}", user.login), "uplink_prev").await.unwrap_or_default();
-                    // Atualiza os campos prev
-                    let _: () = redis_conn.hset(format!("online:{}", user.login), "downlink_prev", &prev_downlink).await?;
-                    let _: () = redis_conn.hset(format!("online:{}", user.login), "uplink_prev", &prev_uplink).await?;
-                    // Lógica de dupla verificação mais robusta
-                    let online = (
-                        downlink != prev_downlink &&
-                        prev_downlink != prev_downlink_prev &&
-                        downlink != prev_downlink_prev
-                    ) || (
-                        uplink != prev_uplink &&
-                        prev_uplink != prev_uplink_prev &&
-                        uplink != prev_uplink_prev
-                    );
+                    // Recupera histórico dos últimos 5 valores de downlink/uplink
+                    let mut downlink_hist = vec![downlink.clone()];
+                    let mut uplink_hist = vec![uplink.clone()];
+                    for i in 1..5 {
+                        let key = if i == 1 { "downlink_prev".to_string() } else { format!("downlink_prev{}", i) };
+                        let val: String = redis_conn.hget(format!("online:{}", user.login), key.as_str()).await.unwrap_or_default();
+                        downlink_hist.push(val);
+                        let key = if i == 1 { "uplink_prev".to_string() } else { format!("uplink_prev{}", i) };
+                        let val: String = redis_conn.hget(format!("online:{}", user.login), key.as_str()).await.unwrap_or_default();
+                        uplink_hist.push(val);
+                    }
+                    // Atualiza histórico no Redis
+                    for i in (1..5).rev() {
+                        let prev_key = if i == 1 { "downlink_prev".to_string() } else { format!("downlink_prev{}", i) };
+                        let prev_val = &downlink_hist[i-1];
+                        let _: () = redis_conn.hset(format!("online:{}", user.login), prev_key.as_str(), prev_val).await?;
+                        let prev_key = if i == 1 { "uplink_prev".to_string() } else { format!("uplink_prev{}", i) };
+                        let prev_val = &uplink_hist[i-1];
+                        let _: () = redis_conn.hset(format!("online:{}", user.login), prev_key.as_str(), prev_val).await?;
+                    }
+                    // Lógica: só marca online se houver pelo menos dois valores diferentes no histórico
+                    let unique_down: std::collections::HashSet<_> = downlink_hist.iter().collect();
+                    let unique_up: std::collections::HashSet<_> = uplink_hist.iter().collect();
+                    let online = unique_down.len() > 1 || unique_up.len() > 1;
                     let status = if online { "On".to_string() } else { "Off".to_string() };
                     fields.push(("downlink", downlink));
                     fields.push(("uplink", uplink));
@@ -95,8 +103,8 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
         }
 
         let elapsed_time = start_time.elapsed();
-        let sleep_duration = if elapsed_time < Duration::from_secs(1) {
-            Duration::from_secs(1) - elapsed_time
+        let sleep_duration = if elapsed_time < Duration::from_secs(5) {
+            Duration::from_secs(5) - elapsed_time
         } else {
             Duration::from_secs(0)
         };
