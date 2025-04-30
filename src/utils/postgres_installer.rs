@@ -47,12 +47,36 @@ fn subir_postgres_docker() -> Result<(), String> {
     let usuario = url.username();
     let senha = url.password().unwrap_or("");
     let nome_banco = url.path().trim_start_matches('/');
-    info!("Subindo container Docker do PostgreSQL...");
-    // Remove container antigo se existir
-    let _ = Command::new("sudo")
-        .arg("docker").arg("rm").arg("-f").arg("postgres")
-        .output();
-    // Sobe novo container
+    info!("Verificando container Docker do PostgreSQL...");
+    // Verifica se o container já existe
+    let check = Command::new("sudo")
+        .arg("docker").arg("ps").arg("-a")
+        .arg("--format").arg("{{.Names}}")
+        .output()
+        .map_err(|e| format!("Erro ao checar containers: {}", e))?;
+    let containers = String::from_utf8_lossy(&check.stdout);
+    if containers.lines().any(|l| l == "postgres") {
+        info!("Container PostgreSQL já existe, iniciando...");
+        let status = Command::new("sudo")
+            .arg("docker").arg("start").arg("postgres")
+            .status();
+        match status {
+            Ok(s) if s.success() => {
+                info!("Container PostgreSQL iniciado com sucesso.");
+                return Ok(());
+            },
+            Ok(s) => {
+                error!("Falha ao iniciar container PostgreSQL, código de saída: {}", s);
+                return Err("Falha ao iniciar container PostgreSQL".into());
+            },
+            Err(e) => {
+                error!("Erro ao iniciar container PostgreSQL: {}", e);
+                return Err("Erro ao iniciar container PostgreSQL".into());
+            }
+        }
+    }
+    // Sobe novo container se não existir
+    info!("Container PostgreSQL não existe, criando novo...");
     let status = Command::new("sudo")
         .arg("docker").arg("run").arg("-d")
         .arg("--name").arg("postgres")
@@ -67,28 +91,52 @@ fn subir_postgres_docker() -> Result<(), String> {
         .status();
     match status {
         Ok(s) if s.success() => {
-            info!("Container PostgreSQL iniciado com sucesso.");
+            info!("Container PostgreSQL criado e iniciado com sucesso.");
             Ok(())
         },
         Ok(s) => {
-            error!("Falha ao iniciar container PostgreSQL, código de saída: {}", s);
-            Err("Falha ao iniciar container PostgreSQL".into())
+            error!("Falha ao criar container PostgreSQL, código de saída: {}", s);
+            Err("Falha ao criar container PostgreSQL".into())
         },
         Err(e) => {
-            error!("Erro ao iniciar container PostgreSQL: {}", e);
-            Err("Erro ao iniciar container PostgreSQL".into())
+            error!("Erro ao criar container PostgreSQL: {}", e);
+            Err("Erro ao criar container PostgreSQL".into())
         }
     }
 }
 
 /// Sobe o container do Redis usando Docker
 fn subir_redis_docker() -> Result<(), String> {
-    info!("Subindo container Docker do Redis...");
-    // Remove container antigo se existir
-    let _ = Command::new("sudo")
-        .arg("docker").arg("rm").arg("-f").arg("redis")
-        .output();
-    // Sobe novo container
+    info!("Verificando container Docker do Redis...");
+    // Verifica se o container já existe
+    let check = Command::new("sudo")
+        .arg("docker").arg("ps").arg("-a")
+        .arg("--format").arg("{{.Names}}")
+        .output()
+        .map_err(|e| format!("Erro ao checar containers: {}", e))?;
+    let containers = String::from_utf8_lossy(&check.stdout);
+    if containers.lines().any(|l| l == "redis") {
+        info!("Container Redis já existe, iniciando...");
+        let status = Command::new("sudo")
+            .arg("docker").arg("start").arg("redis")
+            .status();
+        match status {
+            Ok(s) if s.success() => {
+                info!("Container Redis iniciado com sucesso.");
+                return Ok(());
+            },
+            Ok(s) => {
+                error!("Falha ao iniciar container Redis, código de saída: {}", s);
+                return Err("Falha ao iniciar container Redis".into());
+            },
+            Err(e) => {
+                error!("Erro ao iniciar container Redis: {}", e);
+                return Err("Erro ao iniciar container Redis".into());
+            }
+        }
+    }
+    // Sobe novo container se não existir
+    info!("Container Redis não existe, criando novo...");
     let status = Command::new("sudo")
         .arg("docker").arg("run").arg("-d")
         .arg("--name").arg("redis")
@@ -100,16 +148,16 @@ fn subir_redis_docker() -> Result<(), String> {
         .status();
     match status {
         Ok(s) if s.success() => {
-            info!("Container Redis iniciado com sucesso.");
+            info!("Container Redis criado e iniciado com sucesso.");
             Ok(())
         },
         Ok(s) => {
-            error!("Falha ao iniciar container Redis, código de saída: {}", s);
-            Err("Falha ao iniciar container Redis".into())
+            error!("Falha ao criar container Redis, código de saída: {}", s);
+            Err("Falha ao criar container Redis".into())
         },
         Err(e) => {
-            error!("Erro ao iniciar container Redis: {}", e);
-            Err("Erro ao iniciar container Redis".into())
+            error!("Erro ao criar container Redis: {}", e);
+            Err("Erro ao criar container Redis".into())
         }
     }
 }
