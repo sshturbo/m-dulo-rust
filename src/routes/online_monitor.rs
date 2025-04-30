@@ -1,35 +1,30 @@
 use redis::AsyncCommands;
 use chrono::{NaiveDateTime, Local};
 use serde_json::json;
+use crate::utils::online_utils::get_all_online_users;
 
 pub async fn monitor_users(mut redis_conn: redis::aio::Connection) -> Result<serde_json::Value, redis::RedisError> {
-    let logins: Vec<String> = redis_conn.smembers("online_users").await?;
-    if logins.is_empty() {
-        return Ok(json!({
-            "status": "success",
-            "message": "Nenhum usuário online no momento",
-            "users": []
-        }));
-    }
     let mut users = Vec::new();
     let current_time = Local::now().naive_local();
-    for login in logins {
-        let key = format!("online:{}", login);
-        let user_data: Option<redis::Value> = redis_conn.hgetall(&key).await.ok();
-        if let Some(redis::Value::Bulk(ref fields)) = user_data {
+    if let Ok(online_users) = get_all_online_users().await {
+        for user in online_users {
+            let key = format!("online:{}", user.login);
+            let user_data: Option<redis::Value> = redis_conn.hgetall(&key).await.ok();
             let mut map = std::collections::HashMap::new();
-            let mut i = 0;
-            while i + 1 < fields.len() {
-                if let (redis::Value::Data(ref k), redis::Value::Data(ref v)) = (&fields[i], &fields[i+1]) {
-                    let k = String::from_utf8_lossy(k).to_string();
-                    let v = String::from_utf8_lossy(v).to_string();
-                    map.insert(k, v);
+            if let Some(redis::Value::Bulk(ref fields)) = user_data {
+                let mut i = 0;
+                while i + 1 < fields.len() {
+                    if let (redis::Value::Data(ref k), redis::Value::Data(ref v)) = (&fields[i], &fields[i+1]) {
+                        let k = String::from_utf8_lossy(k).to_string();
+                        let v = String::from_utf8_lossy(v).to_string();
+                        map.insert(k, v);
+                    }
+                    i += 2;
                 }
-                i += 2;
             }
             let inicio_sessao = map.get("inicio_sessao").cloned().unwrap_or_default();
             let usuarios_online = map.get("usuarios_online").and_then(|v| v.parse::<i64>().ok()).unwrap_or(0);
-            let status = map.get("status").cloned().unwrap_or_default();
+            let status = map.get("status").cloned().unwrap_or_else(|| if user.tipo == "xray" { "On".to_string() } else { "".to_string() });
             let limite = map.get("limite").and_then(|v| v.parse::<i64>().ok()).unwrap_or(0);
             let byid = map.get("byid").and_then(|v| v.parse::<i64>().ok()).unwrap_or(0);
             let dono = map.get("dono").cloned().unwrap_or_default();
@@ -39,7 +34,8 @@ pub async fn monitor_users(mut redis_conn: redis::aio::Connection) -> Result<ser
             let minutes = duration.num_minutes() % 60;
             let seconds = duration.num_seconds() % 60;
             users.push(json!({
-                "login": login,
+                "login": user.login,
+                "tipo": user.tipo,
                 "limite": limite,
                 "conexoes_simultaneas": usuarios_online,
                 "tempo_online": format!("{:02}:{:02}:{:02}", hours, minutes, seconds),
