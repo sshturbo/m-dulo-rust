@@ -59,9 +59,16 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                     // Atualiza os campos prev
                     let _: () = redis_conn.hset(format!("online:{}", user.login), "downlink_prev", &prev_downlink).await?;
                     let _: () = redis_conn.hset(format!("online:{}", user.login), "uplink_prev", &prev_uplink).await?;
-                    // Lógica de dupla verificação
-                    let online = (downlink != prev_downlink && prev_downlink != prev_downlink_prev)
-                        || (uplink != prev_uplink && prev_uplink != prev_uplink_prev);
+                    // Lógica de dupla verificação mais robusta
+                    let online = (
+                        downlink != prev_downlink &&
+                        prev_downlink != prev_downlink_prev &&
+                        downlink != prev_downlink_prev
+                    ) || (
+                        uplink != prev_uplink &&
+                        prev_uplink != prev_uplink_prev &&
+                        uplink != prev_uplink_prev
+                    );
                     let status = if online { "On".to_string() } else { "Off".to_string() };
                     fields.push(("downlink", downlink));
                     fields.push(("uplink", uplink));
