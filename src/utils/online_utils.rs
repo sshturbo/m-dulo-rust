@@ -1,7 +1,9 @@
 use std::fs::File;
 use std::io::{self, BufRead, Error};
 use std::process::Command as StdCommand;
-use tokio::process::Command;
+use std::collections::HashMap;
+use m_dulo::xray::app::stats::command::stats_service_client::StatsServiceClient;
+use m_dulo::xray::app::stats::command::QueryStatsRequest;
 
 #[derive(Debug, Clone)]
 pub struct OnlineUser {
@@ -65,39 +67,26 @@ pub fn execute_command(command: &str, args: &[&str]) -> Result<(), Error> {
 }
 
 pub async fn get_xray_online_users() -> Result<Vec<(String, String, String)>, Box<dyn std::error::Error + Send + Sync>> {
-    let output = Command::new("grpcurl")
-        .arg("-plaintext")
-        .arg("-import-path")
-        .arg("/opt/myapp/grpcurl")
-        .arg("-proto")
-        .arg("command.proto")
-        .arg("-proto")
-        .arg("typed_message.proto")
-        .arg("-d")
-        .arg("{\"pattern\": \"\"}")
-        .arg("127.0.0.1:1085")
-        .arg("xray.app.stats.command.StatsService.QueryStats")
-        .output()
-        .await?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let json: serde_json::Value = serde_json::from_str(&stdout)?;
-    let mut users = std::collections::HashMap::new();
-    if let Some(stats) = json.get("stat").and_then(|v| v.as_array()) {
-        for stat in stats {
-            if let (Some(name), Some(value)) = (stat.get("name"), stat.get("value")) {
-                let name_str = name.as_str().unwrap_or("");
-                if name_str.starts_with("user>>>") && name_str.contains(">>>traffic>>>") {
-                    let parts: Vec<&str> = name_str.split(">>>").collect();
-                    if parts.len() >= 4 {
-                        let usuario = parts[1].to_string();
-                        let traf_type = parts[3];
-                        let entry = users.entry(usuario).or_insert((String::new(), String::new()));
-                        match traf_type {
-                            "downlink" => entry.0 = value.as_str().unwrap_or("").to_string(),
-                            "uplink" => entry.1 = value.as_str().unwrap_or("").to_string(),
-                            _ => {}
-                        }
-                    }
+    let mut client = StatsServiceClient::connect("http://127.0.0.1:1085").await?;
+    let request = tonic::Request::new(QueryStatsRequest {
+        pattern: "".to_string(),
+        reset: false,
+    });
+    let response = client.query_stats(request).await?.into_inner();
+    let mut users: HashMap<String, (String, String)> = HashMap::new();
+    for stat in response.stat {
+        let name = stat.name;
+        let value = stat.value.to_string();
+        if name.starts_with("user>>>") && name.contains(">>>traffic>>>") {
+            let parts: Vec<&str> = name.split(">>>").collect();
+            if parts.len() >= 4 {
+                let usuario = parts[1].to_string();
+                let traf_type = parts[3];
+                let entry = users.entry(usuario).or_insert((String::new(), String::new()));
+                match traf_type {
+                    "downlink" => entry.0 = value.clone(),
+                    "uplink" => entry.1 = value.clone(),
+                    _ => {}
                 }
             }
         }

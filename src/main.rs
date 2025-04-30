@@ -22,7 +22,6 @@ mod utils {
     pub mod user_utils;
     pub mod online_utils;
     pub mod postgres_installer;
-    pub mod grpcurl_installer;
 }
 mod config;
 
@@ -42,11 +41,7 @@ use crate::routes::online::monitor_online_users;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Instala o grpcurl se necessário
-    if let Err(e) = utils::grpcurl_installer::install_grpcurl() {
-        eprintln!("Erro ao instalar grpcurl: {}", e);
-    }
-
+   
     // Carregar configuração do config.json
     config::Config::load_from_file("config.json");
 
