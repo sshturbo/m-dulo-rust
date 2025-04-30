@@ -98,6 +98,9 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
             for login in &redis_online_users {
                 let status: String = redis_conn.hget(format!("online:{}", login), "status").await.unwrap_or("Off".to_string());
                 if status == "Off" {
+                    // Remove toda a hash do usuário
+                    let _: () = redis_conn.del(format!("online:{}", login)).await?;
+                    // Remove do set de online
                     let _: () = redis_conn.srem("online_users", login).await?;
                 }
             }
@@ -106,8 +109,8 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
         }
 
         let elapsed_time = start_time.elapsed();
-        let sleep_duration = if elapsed_time < Duration::from_secs(2) {
-            Duration::from_secs(2) - elapsed_time
+        let sleep_duration = if elapsed_time < Duration::from_secs(1) {
+            Duration::from_secs(1) - elapsed_time
         } else {
             Duration::from_secs(0)
         };
