@@ -53,10 +53,10 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                 if user.tipo == "xray" {
                     let downlink = user.downlink.clone().unwrap_or_default();
                     let uplink = user.uplink.clone().unwrap_or_default();
-                    // Recupera histórico dos últimos 5 valores de downlink/uplink
+                    // Recupera histórico dos últimos 15 valores de downlink/uplink
                     let mut downlink_hist = vec![downlink.clone()];
                     let mut uplink_hist = vec![uplink.clone()];
-                    for i in 1..5 {
+                    for i in 1..15 {
                         let key = if i == 1 { "downlink_prev".to_string() } else { format!("downlink_prev{}", i) };
                         let val: String = redis_conn.hget(format!("online:{}", user.login), key.as_str()).await.unwrap_or_default();
                         downlink_hist.push(val);
@@ -65,7 +65,7 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                         uplink_hist.push(val);
                     }
                     // Atualiza histórico no Redis
-                    for i in (1..5).rev() {
+                    for i in (1..15).rev() {
                         let prev_key = if i == 1 { "downlink_prev".to_string() } else { format!("downlink_prev{}", i) };
                         let prev_val = &downlink_hist[i-1];
                         let _: () = redis_conn.hset(format!("online:{}", user.login), prev_key.as_str(), prev_val).await?;
