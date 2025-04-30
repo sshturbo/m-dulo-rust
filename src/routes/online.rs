@@ -78,6 +78,9 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                     let unique_up: std::collections::HashSet<_> = uplink_hist.iter().collect();
                     let online = unique_down.len() > 1 || unique_up.len() > 1;
                     let status = if online { "On".to_string() } else { "Off".to_string() };
+                    if status == "Off" {
+                        let _: () = redis_conn.hdel(format!("online:{}", user.login), "inicio_sessao").await?;
+                    }
                     fields.push(("downlink", downlink));
                     fields.push(("uplink", uplink));
                     fields[0] = ("status", status);
