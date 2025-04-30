@@ -33,16 +33,23 @@ pub async fn monitor_users(mut redis_conn: redis::aio::Connection) -> Result<ser
             let hours = duration.num_hours();
             let minutes = duration.num_minutes() % 60;
             let seconds = duration.num_seconds() % 60;
-            users.push(json!({
-                "login": user.login,
-                "tipo": user.tipo,
-                "limite": limite,
-                "conexoes_simultaneas": usuarios_online,
-                "tempo_online": format!("{:02}:{:02}:{:02}", hours, minutes, seconds),
-                "status": status,
-                "dono": dono,
-                "byid": byid
-            }));
+            let tempo_online = if status == "On" {
+                format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
+            } else {
+                "00:00:00".to_string()
+            };
+            if status == "On" {
+                users.push(json!({
+                    "login": user.login,
+                    "tipo": user.tipo,
+                    "limite": limite,
+                    "conexoes_simultaneas": usuarios_online,
+                    "tempo_online": tempo_online,
+                    "status": status,
+                    "dono": dono,
+                    "byid": byid
+                }));
+            }
         }
     }
     Ok(json!({
