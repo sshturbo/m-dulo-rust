@@ -64,6 +64,14 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                 let keys: Vec<String> = redis_conn.keys(pattern).await.unwrap_or_default();
                 let usuarios_online = keys.len();
                 let _: () = redis_conn.hset(&key, "usuarios_online", usuarios_online).await?;
+
+                let limite_usize = limite as usize;
+                if (user.tipo == "ssh" || user.tipo == "openvpn") && usuarios_online > limite_usize && limite > 0 {
+                    let _ = std::process::Command::new("pkill")
+                        .arg("-u")
+                        .arg(&user.login)
+                        .output();
+                }
             }
 
             // Remove usuários que não estão mais online do set

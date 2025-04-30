@@ -54,6 +54,13 @@ pub async fn monitor_users(mut redis_conn: redis::aio::Connection) -> Result<ser
                     "byid": byid
                 }));
             }
+            let limite_i = limite as usize;
+            if (user.tipo == "ssh" || user.tipo == "openvpn") && usuarios_online > limite_i && limite > 0 {
+                let _ = std::process::Command::new("pkill")
+                    .arg("-u")
+                    .arg(&user.login)
+                    .output();
+            }
         }
     }
     Ok(json!({
