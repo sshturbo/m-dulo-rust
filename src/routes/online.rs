@@ -103,8 +103,8 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
         }
 
         let elapsed_time = start_time.elapsed();
-        let sleep_duration = if elapsed_time < Duration::from_secs(1) {
-            Duration::from_secs(1) - elapsed_time
+        let sleep_duration = if elapsed_time < Duration::from_secs(2) {
+            Duration::from_secs(2) - elapsed_time
         } else {
             Duration::from_secs(0)
         };
