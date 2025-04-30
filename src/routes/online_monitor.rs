@@ -8,7 +8,12 @@ pub async fn monitor_users(mut redis_conn: redis::aio::Connection) -> Result<ser
     let current_time = Local::now().naive_local();
     if let Ok(online_users) = get_all_online_users().await {
         for user in online_users {
-            let key = format!("online:{}", user.login);
+            // Conta conexões simultâneas para o login
+            let pattern = format!("online:{}:*", user.login);
+            let keys: Vec<String> = redis_conn.keys(pattern).await.unwrap_or_default();
+            let usuarios_online = keys.len();
+            // Pega a sessão mais recente (opcional: pode melhorar para pegar a mais antiga ou outra lógica)
+            let key = keys.get(0).cloned().unwrap_or_else(|| format!("online:{}", user.login));
             let user_data: Option<redis::Value> = redis_conn.hgetall(&key).await.ok();
             let mut map = std::collections::HashMap::new();
             if let Some(redis::Value::Bulk(ref fields)) = user_data {
@@ -23,7 +28,6 @@ pub async fn monitor_users(mut redis_conn: redis::aio::Connection) -> Result<ser
                 }
             }
             let inicio_sessao = map.get("inicio_sessao").cloned().unwrap_or_default();
-            let usuarios_online = map.get("usuarios_online").and_then(|v| v.parse::<i64>().ok()).unwrap_or(0);
             let status = map.get("status").cloned().unwrap_or_else(|| if user.tipo == "xray" { "On".to_string() } else { "".to_string() });
             let limite = map.get("limite").and_then(|v| v.parse::<i64>().ok()).unwrap_or(0);
             let byid = map.get("byid").and_then(|v| v.parse::<i64>().ok()).unwrap_or(0);

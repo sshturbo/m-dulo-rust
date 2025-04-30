@@ -35,8 +35,10 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                 } else {
                     (String::new(), 0, 0)
                 };
-                // Verifica se inicio_sessao já existe no Redis
-                let inicio_sessao: Option<String> = redis_conn.hget(format!("online:{}", user.login), "inicio_sessao").await.ok();
+                let uuid = user.downlink.as_ref().or(user.uplink.as_ref()).unwrap_or(&"".to_string()).clone();
+                let uuid = if let Some(uuid) = user.login.split(':').nth(1) { uuid.to_string() } else { uuid };
+                let key = format!("online:{}:{}", user.login, uuid);
+                let inicio_sessao: Option<String> = redis_conn.hget(&key, "inicio_sessao").await.ok();
                 let inicio_sessao = match inicio_sessao {
                     Some(ref val) if !val.is_empty() => val.clone(),
                     _ => current_date.format("%d/%m/%Y %H:%M:%S").to_string(),
@@ -47,50 +49,21 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                     ("dono", dono.clone()),
                     ("byid", byid.to_string()),
                     ("limite", limite.to_string()),
-                    ("usuarios_online", "1".to_string()),
                 ];
-                // Se for Xray, salva também downlink/uplink e faz dupla verificação
                 if user.tipo == "xray" {
                     let downlink = user.downlink.clone().unwrap_or_default();
                     let uplink = user.uplink.clone().unwrap_or_default();
-                    // Recupera histórico dos últimos 15 valores de downlink/uplink
-                    let mut downlink_hist = vec![downlink.clone()];
-                    let mut uplink_hist = vec![uplink.clone()];
-                    for i in 1..15 {
-                        let key = if i == 1 { "downlink_prev".to_string() } else { format!("downlink_prev{}", i) };
-                        let val: String = redis_conn.hget(format!("online:{}", user.login), key.as_str()).await.unwrap_or_default();
-                        downlink_hist.push(val);
-                        let key = if i == 1 { "uplink_prev".to_string() } else { format!("uplink_prev{}", i) };
-                        let val: String = redis_conn.hget(format!("online:{}", user.login), key.as_str()).await.unwrap_or_default();
-                        uplink_hist.push(val);
-                    }
-                    // Atualiza histórico no Redis
-                    for i in (1..15).rev() {
-                        let prev_key = if i == 1 { "downlink_prev".to_string() } else { format!("downlink_prev{}", i) };
-                        let prev_val = &downlink_hist[i-1];
-                        let _: () = redis_conn.hset(format!("online:{}", user.login), prev_key.as_str(), prev_val).await?;
-                        let prev_key = if i == 1 { "uplink_prev".to_string() } else { format!("uplink_prev{}", i) };
-                        let prev_val = &uplink_hist[i-1];
-                        let _: () = redis_conn.hset(format!("online:{}", user.login), prev_key.as_str(), prev_val).await?;
-                    }
-                    // Lógica: só marca online se houver pelo menos dois valores diferentes no histórico
-                    let unique_down: std::collections::HashSet<_> = downlink_hist.iter().collect();
-                    let unique_up: std::collections::HashSet<_> = uplink_hist.iter().collect();
-                    let online = unique_down.len() > 1 || unique_up.len() > 1;
-                    let status = if online { "On".to_string() } else { "Off".to_string() };
-                    if status == "Off" {
-                        let _: () = redis_conn.hdel(format!("online:{}", user.login), "inicio_sessao").await?;
-                    }
                     fields.push(("downlink", downlink));
                     fields.push(("uplink", uplink));
-                    fields[0] = ("status", status);
                 }
                 let fields_ref: Vec<(&str, &str)> = fields.iter().map(|(k, v)| (*k, v.as_str())).collect();
-                let _: () = redis_conn.hset_multiple(
-                    format!("online:{}", user.login),
-                    &fields_ref
-                ).await?;
+                let _: () = redis_conn.hset_multiple(&key, &fields_ref).await?;
                 let _: () = redis_conn.sadd("online_users", &user.login).await?;
+                // Atualiza usuarios_online para o login
+                let pattern = format!("online:{}:*", user.login);
+                let keys: Vec<String> = redis_conn.keys(pattern).await.unwrap_or_default();
+                let usuarios_online = keys.len();
+                let _: () = redis_conn.hset(&key, "usuarios_online", usuarios_online).await?;
             }
 
             // Remove usuários que não estão mais online do set

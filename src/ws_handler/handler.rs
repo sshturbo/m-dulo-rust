@@ -225,7 +225,7 @@ async fn handle_online_socket(
         return;
     }
     
-    let mut interval = tokio::time::interval(Duration::from_secs(5));
+    let mut interval = tokio::time::interval(Duration::from_secs(2));
     let mut last_update = String::new();
     
     loop {
