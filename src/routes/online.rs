@@ -60,49 +60,28 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                     let uplink_val: u64 = uplink.parse().unwrap_or(0);
                     let mut no_change_count: u32 = redis_conn.hget(&key, "no_change_count").await.unwrap_or(0);
                     let mut status = "On".to_string();
-                    let min_bytes = 5 * 1024; // 5KB
+                    let min_bytes = 1024; // 1KB
                     let prev_status: String = redis_conn.hget(&key, "status").await.unwrap_or("Off".to_string());
                     let mut inicio_sessao_val = redis_conn.hget(&key, "inicio_sessao").await.unwrap_or_else(|_| current_date.format("%d/%m/%Y %H:%M:%S").to_string());
-                    
-                    let downlink_diff = if downlink_val > saved_downlink_val {
-                        downlink_val - saved_downlink_val
-                    } else {
-                        0
-                    };
-                    
-                    let uplink_diff = if uplink_val > saved_uplink_val {
-                        uplink_val - saved_uplink_val
-                    } else {
-                        0
-                    };
-                    
-                    let min_diff = 2 * 1024;
-                    
-                    if (downlink_diff > min_diff || uplink_diff > min_diff) 
+                    if (downlink_val > saved_downlink_val || uplink_val > saved_uplink_val)
                         && (downlink_val > min_bytes || uplink_val > min_bytes)
                     {
+                        // Houve tráfego novo e está acima do mínimo
                         status = "On".to_string();
                         no_change_count = 0;
                         fields.push(("downlink", downlink.clone()));
                         fields.push(("uplink", uplink.clone()));
+                        // Só atualiza inicio_sessao se estava Off antes
                         if prev_status == "Off" {
                             inicio_sessao_val = current_date.format("%d/%m/%Y %H:%M:%S").to_string();
                         }
-                        fields.push(("last_activity", chrono::Local::now().timestamp().to_string()));
                     } else {
-                        let last_activity: i64 = redis_conn.hget(&key, "last_activity").await.unwrap_or(0);
-                        let now = chrono::Local::now().timestamp();
-                        let inactivity_timeout = 60;
-                        
-                        if now - last_activity > inactivity_timeout {
+                        // Não houve tráfego novo ou está abaixo do mínimo
+                        no_change_count += 1;
+                        if no_change_count >= 4 {
                             status = "Off".to_string();
-                        } else {
-                            no_change_count += 1;
-                            if no_change_count >= 10 {
-                                status = "Off".to_string();
-                            }
                         }
-                        
+                        // Mantém os valores antigos de downlink/uplink
                         fields.push(("downlink", saved_downlink));
                         fields.push(("uplink", saved_uplink));
                     }
@@ -113,10 +92,11 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                     let fields_ref: Vec<(&str, &str)> = fields.iter().map(|(k, v)| (*k, v.as_str())).collect();
                     let _: () = redis_conn.hset_multiple(&key, &fields_ref).await?;
                     let _: () = redis_conn.sadd("online_users", &user.login).await?;
+                    // Remove imediatamente se ficou Off
                     if status == "Off" {
                         let _: () = redis_conn.del(&key).await?;
                         let _: () = redis_conn.srem("online_users", &user.login).await?;
-                        continue;
+                        continue; // Não conta para conexoes_simultaneas
                     }
                 } else {
                     // SSH/OpenVPN: lógica antiga
@@ -155,7 +135,7 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                 for key in keys {
                     let last_seen: i64 = redis_conn.hget(&key, "last_seen").await.unwrap_or(0);
                     let now = chrono::Local::now().timestamp();
-                    if now - last_seen > 30 {
+                    if now - last_seen > 4 {
                         let _: () = redis_conn.del(&key).await?;
                         let _: () = redis_conn.srem("online_users", login).await?;
                     }

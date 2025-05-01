@@ -91,16 +91,11 @@ pub async fn get_xray_online_users() -> Result<Vec<(String, String, String)>, Bo
             }
         }
     }
-    
-    // Aumentado o limite mínimo para 5KB (era 1KB)
-    let min_bytes = 5 * 1024;
-    
-    // Filtra usuários com tráfego significativo
+    let min_bytes = 1024; // 1KB, ajuste conforme necessário
     let result = users.into_iter()
         .filter(|(_usuario, (down, up))| {
             let down: u64 = down.parse().unwrap_or(0);
             let up: u64 = up.parse().unwrap_or(0);
-            // Requer que pelo menos um dos valores seja acima do mínimo
             down > min_bytes || up > min_bytes
         })
         .map(|(usuario, (down, up))| (usuario, down, up))
