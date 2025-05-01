@@ -80,6 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool_clone = pool.clone();
     let redis_client_clone = redis_client.clone();
     let proxy_ativas_clone = proxy_ativas.clone();
+    println!("Iniciando proxy na porta 9002...");
     tokio::spawn(async move {
         crate::proxy_server::start_proxy_server(
             "0.0.0.0:9002",
