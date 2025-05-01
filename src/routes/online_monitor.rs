@@ -2,8 +2,10 @@ use redis::AsyncCommands;
 use chrono::{NaiveDateTime, Local};
 use serde_json::json;
 use crate::utils::online_utils::get_all_online_users;
+use sqlx::PgPool;
+use sqlx::Row;
 
-pub async fn monitor_users(mut redis_conn: redis::aio::Connection) -> Result<serde_json::Value, redis::RedisError> {
+pub async fn monitor_users(mut redis_conn: redis::aio::Connection, pool: &PgPool) -> Result<serde_json::Value, redis::RedisError> {
     let mut users = Vec::new();
     let current_time = Local::now().naive_local();
     if let Ok(online_users) = get_all_online_users().await {
@@ -11,7 +13,18 @@ pub async fn monitor_users(mut redis_conn: redis::aio::Connection) -> Result<ser
             // Conta conexões simultâneas para o login
             let pattern = format!("online:{}:*", user.login);
             let keys: Vec<String> = redis_conn.keys(pattern).await.unwrap_or_default();
-            let usuarios_online = keys.len();
+            let usuarios_online = if user.tipo == "xray" {
+                1 // Força conexões simultâneas como 1 para Xray
+            } else {
+                let mut count = 0;
+                for k in &keys {
+                    let st: String = redis_conn.hget(k, "status").await.unwrap_or("Off".to_string());
+                    if st == "On" {
+                        count += 1;
+                    }
+                }
+                count
+            };
             // Pega a sessão mais recente (opcional: pode melhorar para pegar a mais antiga ou outra lógica)
             let key = keys.get(0).cloned().unwrap_or_else(|| format!("online:{}", user.login));
             let user_data: Option<redis::Value> = redis_conn.hgetall(&key).await.ok();
@@ -43,6 +56,20 @@ pub async fn monitor_users(mut redis_conn: redis::aio::Connection) -> Result<ser
                 "00:00:00".to_string()
             };
             if status == "On" {
+                let uuid = if user.tipo == "xray" {
+                    // Buscar UUID do banco de dados
+                    match sqlx::query("SELECT uuid FROM users WHERE login = $1")
+                        .bind(&user.login)
+                        .fetch_optional(pool)
+                        .await
+                    {
+                        Ok(Some(row)) => row.try_get::<String, _>("uuid").unwrap_or_default(),
+                        _ => String::new()
+                    }
+                } else {
+                    String::new()
+                };
+
                 users.push(json!({
                     "login": user.login,
                     "tipo": user.tipo,
@@ -51,7 +78,8 @@ pub async fn monitor_users(mut redis_conn: redis::aio::Connection) -> Result<ser
                     "tempo_online": tempo_online,
                     "status": status,
                     "dono": dono,
-                    "byid": byid
+                    "byid": byid,
+                    "uuid": uuid
                 }));
             }
             let limite_i = limite as usize;

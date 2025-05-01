@@ -91,7 +91,7 @@ pub async fn get_xray_online_users() -> Result<Vec<(String, String, String)>, Bo
             }
         }
     }
-    let min_bytes = 1024; // 1KB, ajuste conforme necessário
+    let min_bytes = 20480; // 1KB, ajuste conforme necessário
     let result = users.into_iter()
         .filter(|(_usuario, (down, up))| {
             let down: u64 = down.parse().unwrap_or(0);

@@ -22,21 +22,25 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
             // Atualiza ou insere usuários online no Redis
             for user in &online_users {
                 // Buscar dono, byid e limite do banco usando sqlx::query
-                let row = sqlx::query("SELECT dono, byid, limite FROM users WHERE login = $1")
+                let row = sqlx::query("SELECT dono, byid, limite, uuid FROM users WHERE login = $1")
                     .bind(&user.login)
                     .fetch_optional(pool)
                     .await?;
-                let (dono, byid, limite) = if let Some(row) = row {
+                let (dono, byid, limite, uuid_db) = if let Some(row) = row {
                     (
                         row.try_get::<String, _>("dono").unwrap_or_default(),
                         row.try_get::<i32, _>("byid").unwrap_or(0),
                         row.try_get::<i32, _>("limite").unwrap_or(0),
+                        row.try_get::<String, _>("uuid").unwrap_or_default(),
                     )
                 } else {
-                    (String::new(), 0, 0)
+                    (String::new(), 0, 0, String::new())
                 };
-                let uuid = user.downlink.as_ref().or(user.uplink.as_ref()).unwrap_or(&"".to_string()).clone();
-                let uuid = if let Some(uuid) = user.login.split(':').nth(1) { uuid.to_string() } else { uuid };
+                let uuid = if user.tipo == "xray" {
+                    uuid_db
+                } else {
+                    String::new()
+                };
                 let key = format!("online:{}:{}", user.login, uuid);
                 let inicio_sessao: Option<String> = redis_conn.hget(&key, "inicio_sessao").await.ok();
                 let inicio_sessao = match inicio_sessao {
@@ -60,7 +64,7 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                     let uplink_val: u64 = uplink.parse().unwrap_or(0);
                     let mut no_change_count: u32 = redis_conn.hget(&key, "no_change_count").await.unwrap_or(0);
                     let mut status = "On".to_string();
-                    let min_bytes = 1024 * 5; // Reduzindo para 5KB para melhor compatibilidade com o intervalo de 2s
+                    let min_bytes = 1024 * 20; // Reduzindo para 20KB para melhor compatibilidade com o intervalo de 2s
                     let prev_status: String = redis_conn.hget(&key, "status").await.unwrap_or("Off".to_string());
                     let mut inicio_sessao_val = redis_conn.hget(&key, "inicio_sessao").await.unwrap_or_else(|_| current_date.format("%d/%m/%Y %H:%M:%S").to_string());
                     
@@ -79,7 +83,7 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                     } else {
                         no_change_count += 1;
                         // Ajustando para considerar o intervalo de 2 segundos do handler
-                        if no_change_count >= 3 { // 3 verificações = ~6 segundos (2s * 3)
+                        if no_change_count >= 12 { // 3 verificações = ~6 segundos (2s * 3)
                             status = "Off".to_string();
                         }
                         fields.push(("downlink", saved_downlink));
@@ -109,13 +113,18 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                 // Atualiza usuarios_online para o login (apenas status On)
                 let pattern = format!("online:{}:*", user.login);
                 let keys: Vec<String> = redis_conn.keys(pattern).await.unwrap_or_default();
-                let mut usuarios_online = 0;
-                for k in &keys {
-                    let st: String = redis_conn.hget(k, "status").await.unwrap_or("Off".to_string());
-                    if st == "On" {
-                        usuarios_online += 1;
+                let usuarios_online = if user.tipo == "xray" {
+                    1 // Força conexões simultâneas como 1 para Xray
+                } else {
+                    let mut count = 0;
+                    for k in &keys {
+                        let st: String = redis_conn.hget(k, "status").await.unwrap_or("Off".to_string());
+                        if st == "On" {
+                            count += 1;
+                        }
                     }
-                }
+                    count
+                };
                 let _: () = redis_conn.hset(&key, "usuarios_online", usuarios_online).await?;
 
                 let limite_usize = limite as usize;

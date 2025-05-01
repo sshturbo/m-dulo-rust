@@ -196,7 +196,7 @@ async fn handle_socket(
 
 async fn handle_online_socket(
     mut socket: WebSocket,
-    _pool: PgPool,
+    pool: PgPool,
 ) {
     let redis_client = redis::Client::open("redis://127.0.0.1/").expect("Erro ao conectar no Redis");
     info!("Cliente conectado ao WebSocket /online");
@@ -225,7 +225,7 @@ async fn handle_online_socket(
         return;
     }
     
-    let mut interval = tokio::time::interval(Duration::from_secs(2));
+    let mut interval = tokio::time::interval(Duration::from_secs(1));
     let mut last_update = String::new();
     
     loop {
@@ -233,7 +233,7 @@ async fn handle_online_socket(
             _ = interval.tick() => {
                 // Cria uma nova conexão Redis a cada iteração
                 let redis_conn = redis_client.get_async_connection().await.expect("Erro ao obter conexão Redis");
-                match monitor_users(redis_conn).await {
+                match monitor_users(redis_conn, &pool).await {
                     Ok(users) => {
                         let current_update = users.to_string();
                         if current_update != last_update {
