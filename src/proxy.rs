@@ -59,10 +59,10 @@ pub fn derrubar_conexao(ativas: &ConexoesAtivas, uuid: &Uuid) {
 /// Valida se o UUID existe no banco de dados PostgreSQL
 pub async fn validar_uuid(pool: &PgPool, uuid: &Uuid) -> Result<bool, sqlx::Error> {
     let uuid_str = uuid.to_string();
-    logging::log_proxy_erro(&format!("Consultando UUID no banco: {}", uuid_str));
+    logging::log_proxy_tipo_conexao(&format!("Consultando UUID no banco: {}", uuid_str));
     
-    // Consulta modificada para comparar strings
-    let row: Option<(i64,)> = sqlx::query_as("SELECT 1 FROM users WHERE uuid::text = $1::text LIMIT 1")
+    // Consulta modificada para comparar strings e usar i32 (INT4)
+    let row: Option<(i32,)> = sqlx::query_as("SELECT 1 FROM users WHERE uuid::text = $1::text LIMIT 1")
         .bind(&uuid_str)
         .fetch_optional(pool)
         .await?;
