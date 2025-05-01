@@ -52,6 +52,11 @@ prost = "0.12"
 
 dashmap = "5"
 tokio-tungstenite = "0.20"
+nix = { version = "0.30.0", features = ["socket"] }
+httparse = "1.10.1"
+hyper = "1.6.0"
+tokio-util = "0.7.15"
+bytes = "1.10.1"
 
 [build-dependencies]
 tonic-build = "0.11"
