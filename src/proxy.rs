@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tokio::sync::oneshot;
 use sqlx::PgPool;
 use redis::aio::Connection;
+use crate::utils::logging;
 
 pub type ConexoesAtivas = Arc<DashMap<Uuid, oneshot::Sender<()>>>;
 
@@ -58,11 +59,18 @@ pub fn derrubar_conexao(ativas: &ConexoesAtivas, uuid: &Uuid) {
 /// Valida se o UUID existe no banco de dados PostgreSQL
 pub async fn validar_uuid(pool: &PgPool, uuid: &Uuid) -> Result<bool, sqlx::Error> {
     let uuid_str = uuid.to_string();
-    println!("[PROXY] Consultando UUID no banco: {}", uuid_str);
-    let row: Option<(i64,)> = sqlx::query_as("SELECT 1 FROM users WHERE uuid = $1 LIMIT 1")
-        .bind(uuid_str.clone())
+    logging::log_proxy_erro(&format!("Consultando UUID no banco: {}", uuid_str));
+    
+    // Consulta modificada para comparar strings
+    let row: Option<(i64,)> = sqlx::query_as("SELECT 1 FROM users WHERE uuid::text = $1::text LIMIT 1")
+        .bind(&uuid_str)
         .fetch_optional(pool)
         .await?;
-    println!("[PROXY] UUID {} {}", uuid_str, if row.is_some() { "encontrado" } else { "não encontrado" });
+        
+    if row.is_some() {
+        logging::log_proxy_uuid_valido(uuid, "banco");
+    } else {
+        logging::log_proxy_uuid_invalido(uuid, "banco");
+    }
     Ok(row.is_some())
 } 
