@@ -24,6 +24,8 @@ mod utils {
     pub mod postgres_installer;
 }
 mod config;
+mod proxy_server;
+mod proxy;
 
 use axum::{
     routing::get,
@@ -72,6 +74,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Inicializa conexão Redis
     let redis_client = redis::Client::open("redis://127.0.0.1/").expect("Erro ao conectar no Redis");
+
+    // Inicializa estrutura de conexões ativas do proxy
+    let proxy_ativas = std::sync::Arc::new(dashmap::DashMap::new());
+    let pool_clone = pool.clone();
+    let redis_client_clone = redis_client.clone();
+    let proxy_ativas_clone = proxy_ativas.clone();
+    tokio::spawn(async move {
+        crate::proxy_server::start_proxy_server(
+            "0.0.0.0:9002",
+            pool_clone,
+            redis_client_clone,
+            proxy_ativas_clone
+        ).await;
+    });
 
     // Inicia o processo do cloudflared em uma nova task
     let pool_clone = pool.clone();
