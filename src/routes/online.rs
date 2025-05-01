@@ -60,28 +60,28 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                     let uplink_val: u64 = uplink.parse().unwrap_or(0);
                     let mut no_change_count: u32 = redis_conn.hget(&key, "no_change_count").await.unwrap_or(0);
                     let mut status = "On".to_string();
-                    let min_bytes = 1024; // 1KB
+                    let min_bytes = 1024 * 5; // Reduzindo para 5KB para melhor compatibilidade com o intervalo de 2s
                     let prev_status: String = redis_conn.hget(&key, "status").await.unwrap_or("Off".to_string());
                     let mut inicio_sessao_val = redis_conn.hget(&key, "inicio_sessao").await.unwrap_or_else(|_| current_date.format("%d/%m/%Y %H:%M:%S").to_string());
-                    if (downlink_val > saved_downlink_val || uplink_val > saved_uplink_val)
-                        && (downlink_val > min_bytes || uplink_val > min_bytes)
-                    {
-                        // Houve tráfego novo e está acima do mínimo
+                    
+                    // Verifica se houve mudança significativa no tráfego
+                    let traffic_changed = downlink_val > saved_downlink_val + min_bytes || uplink_val > saved_uplink_val + min_bytes;
+                    let has_minimum_traffic = downlink_val > min_bytes || uplink_val > min_bytes;
+                    
+                    if traffic_changed && has_minimum_traffic {
                         status = "On".to_string();
                         no_change_count = 0;
                         fields.push(("downlink", downlink.clone()));
                         fields.push(("uplink", uplink.clone()));
-                        // Só atualiza inicio_sessao se estava Off antes
                         if prev_status == "Off" {
                             inicio_sessao_val = current_date.format("%d/%m/%Y %H:%M:%S").to_string();
                         }
                     } else {
-                        // Não houve tráfego novo ou está abaixo do mínimo
                         no_change_count += 1;
-                        if no_change_count >= 4 {
+                        // Ajustando para considerar o intervalo de 2 segundos do handler
+                        if no_change_count >= 3 { // 3 verificações = ~6 segundos (2s * 3)
                             status = "Off".to_string();
                         }
-                        // Mantém os valores antigos de downlink/uplink
                         fields.push(("downlink", saved_downlink));
                         fields.push(("uplink", saved_uplink));
                     }
@@ -127,7 +127,7 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                 }
             }
 
-            // Timeout para Xray e cleanup geral: remove qualquer chave online:{login}:* não atualizada (last_seen > 4s)
+            // Timeout para Xray e cleanup geral: remove qualquer chave online:{login}:* não atualizada (last_seen > 8s)
             let redis_online_users: Vec<String> = redis_conn.smembers("online_users").await.unwrap_or_default();
             for login in &redis_online_users {
                 let pattern = format!("online:{}:*", login);
@@ -135,7 +135,7 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
                 for key in keys {
                     let last_seen: i64 = redis_conn.hget(&key, "last_seen").await.unwrap_or(0);
                     let now = chrono::Local::now().timestamp();
-                    if now - last_seen > 4 {
+                    if now - last_seen > 8 { // Aumentando para 8 segundos (4 intervalos de 2s)
                         let _: () = redis_conn.del(&key).await?;
                         let _: () = redis_conn.srem("online_users", login).await?;
                     }
@@ -158,10 +158,10 @@ pub async fn monitor_online_users(mut redis_conn: redis::aio::Connection, pool: 
         }
 
         let elapsed_time = start_time.elapsed();
-        let sleep_duration = if elapsed_time < Duration::from_secs(1) {
-            Duration::from_secs(1) - elapsed_time
+        let sleep_duration = if elapsed_time < Duration::from_millis(500) {
+            Duration::from_millis(500) - elapsed_time // Reduzindo o intervalo de sleep para 500ms
         } else {
-            Duration::from_secs(0)
+            Duration::from_millis(0)
         };
 
         sleep(sleep_duration).await;
