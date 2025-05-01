@@ -105,8 +105,10 @@ done
 if [ -d "$APP_DIR" ]; then
     print_centered "DIRETÓRIO $APP_DIR JÁ EXISTE. EXCLUINDO ANTIGO..."
     if systemctl list-units --full -all | grep -Fq "$SERVICE_FILE_NAME"; then
-        run_with_spinner "systemctl stop $SERVICE_FILE_NAME" "PARANDO SERVIÇO"
-        run_with_spinner "systemctl disable $SERVICE_FILE_NAME" "DESABILITANDO SERVIÇO"
+        echo "PARANDO SERVIÇO. FEITO!"
+        sudo systemctl stop m-dulo
+        echo "DESABILITANDO SERVIÇO. FEITO!"
+        sudo systemctl disable m-dulo
     else
         print_centered "SERVIÇO $SERVICE_FILE_NAME NÃO ENCONTRADO."
     fi
