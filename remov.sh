@@ -43,8 +43,8 @@ if systemctl list-units --type=service | grep -q "postgresql"; then
     systemctl disable postgresql
 
     echo "Removendo PostgreSQL..."
-    yes | apt-get purge -y postgresql*
-    yes | apt-get autoremove -y
+    apt-get purge -y postgresql*
+    apt-get autoremove -y
     rm -rf /etc/postgresql /var/lib/postgresql
 else
     echo "PostgreSQL não encontrado ou já removido."
