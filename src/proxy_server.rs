@@ -74,7 +74,11 @@ async fn handle_tcp_vless(
 
     let uuid_bytes = &handshake[1..17];
     let uuid = match Uuid::from_slice(uuid_bytes) {
-        Ok(u) => u,
+        Ok(u) => {
+            println!("[PROXY] UUID recebido (hex): {:?}", uuid_bytes);
+            println!("[PROXY] UUID parseado: {}", u);
+            u
+        },
         Err(e) => {
             logging::log_proxy_erro(&format!("UUID inválido de {}: {}", addr, e));
             let _ = client_stream.write_all(b"UUID INVALIDO\n").await;
@@ -141,7 +145,11 @@ async fn handle_ws_vless(
 
     let uuid_bytes = &handshake[1..17];
     let uuid = match Uuid::from_slice(uuid_bytes) {
-        Ok(u) => u,
+        Ok(u) => {
+            println!("[PROXY] UUID recebido (hex): {:?}", uuid_bytes);
+            println!("[PROXY] UUID parseado: {}", u);
+            u
+        },
         Err(e) => {
             logging::log_proxy_erro(&format!("UUID WS inválido de {}: {}", addr, e));
             let _ = ws_stream.send(Message::Text("UUID INVALIDO".into())).await;
