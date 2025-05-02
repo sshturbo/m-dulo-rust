@@ -50,6 +50,17 @@ else
     echo "PostgreSQL não encontrado ou já removido."
 fi
 
+# --- REMOÇÃO DO DIRETÓRIO .cloudflared ---
+CLOUDFLARED_DIR="$HOME/.cloudflared"
+
+if [ -d "$CLOUDFLARED_DIR" ]; then
+    echo "Removendo diretório .cloudflared em $CLOUDFLARED_DIR..."
+    rm -rf "$CLOUDFLARED_DIR"
+    echo "Diretório .cloudflared removido com sucesso."
+else
+    echo "Diretório .cloudflared não encontrado ou já removido."
+fi
+
 echo "Parando e removendo todos os contêineres Docker..."
 docker stop $(docker ps -aq)
 docker rm $(docker ps -aq)
