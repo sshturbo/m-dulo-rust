@@ -5,17 +5,18 @@
 # ===============================
 APP_DIR="/opt/myapp"
 DEPENDENCIES=("unzip")
-VERSION="1.0.4"
+VERSION="1.0.5"
 FILE_URL="https://github.com/sshturbo/m-dulo-rust/releases/download/$VERSION"
 ARCH=$(uname -m)
 SERVICE_FILE_NAME="m-dulo.service"
 
-# Verifica se o token foi passado como argumento
-if [ -z "$1" ]; then
-    echo "Uso: $0 <API_TOKEN>"
+# Verifica se o token e o domínio foram passados como argumento
+if [ -z "$1" ] || [ -z "$2" ]; then
+    echo "Uso: $0 <API_TOKEN> <DOMAIN>"
     exit 1
 fi
 API_TOKEN="$1"
+DOMAIN="$2"
 
 # Determinar arquitetura e nome do arquivo para download
 case $ARCH in
@@ -131,7 +132,7 @@ progress_bar 5
 cat > "$APP_DIR/config.json" <<EOF
 {
     "api_token": "$API_TOKEN",
-    "database_url": "postgres://mdulo:i92rG0WUo0D57oP@localhost/mdulo",
+    "domain": "$DOMAIN/online.php",
     "logs_enabled": true
 }
 EOF
