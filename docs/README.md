@@ -30,7 +30,7 @@ O token pode ser obtido nas configurações da API do painel admin.
 
 Cria uma nova revenda com atribuição de recursos.
 
-**Endpoint:** POST `/api/revenda/criar`
+**Endpoint:** POST `/api/revenda/criar.php`
 
 **Headers:**
 
@@ -87,7 +87,7 @@ Authorization: Bearer {token}
 
 Renova a atribuição de uma revenda existente.
 
-**Endpoint:** POST `/api/revenda/renovar`
+**Endpoint:** POST `/api/revenda/renovar.php`
 
 **Headers:**
 
@@ -133,7 +133,7 @@ Authorization: Bearer {token}
 
 Exclui uma revenda e todos seus usuários associados.
 
-**Endpoint:** POST `/api/revenda/excluir`
+**Endpoint:** POST `/api/revenda/excluir.php`
 
 **Headers:**
 
@@ -175,7 +175,7 @@ Authorization: Bearer {token}
 
 Retorna todos os usuários online atualmente cadastrados na tabela `api_online`, com informações do tempo online calculado.
 
-**Endpoint:** GET `/api/online/listall`
+**Endpoint:** GET `/api/online/listall.php`
 
 **Headers:**
 
@@ -220,7 +220,7 @@ Nenhum parâmetro necessário.
 
 Cria um novo usuário no sistema.
 
-**Endpoint:** POST `/api/usuario/criar`
+**Endpoint:** POST `/api/usuario/criar.php`
 
 **Headers:**
 
@@ -239,7 +239,6 @@ Authorization: Bearer {token}
   "limite": number, // Limite de conexões (obrigatório)
   "tipo": "string", // Tipo do usuário: v2ray, xray ou ssh (opcional, default: v2ray)
   "uuid": "string", // UUID para usuários v2ray/xray (opcional)
-  // categoriaid: não é mais necessário enviar, será usado o da atribuição do token
   "nome": "string", // Nome do usuário (obrigatório)
   "contato": "string", // Contato do usuário (opcional)
 }
@@ -273,7 +272,7 @@ Authorization: Bearer {token}
 
 Cria um usuário de teste com limite 1 e tempo de expiração em minutos.
 
-**Endpoint:** POST `/api/usuario/criar_teste`
+**Endpoint:** POST `/api/usuario/criar_teste.php`
 
 **Headers:**
 
@@ -295,12 +294,6 @@ Authorization: Bearer {token}
   "uuid": "string" // UUID (opcional)
 }
 ```
-
-**Validações:**
-
-- Limite de minutos entre 60 e o valor de `maxtest` da tabela config
-- Limite de teste por categoria e créditos disponíveis
-- Suspensão e validade da atribuição
 
 **Comportamento:**
 
@@ -326,9 +319,9 @@ Authorization: Bearer {token}
 
 ### Renovar Usuário
 
-Renova a validade de um usuário existente por 31 dias, utilizando automaticamente o limite e limtetest já cadastrados no banco de dados.
+Renova a validade de um usuário existente por 31 dias, utilizando automaticamente o limite já cadastrados no banco de dados.
 
-**Endpoint:** POST `/api/usuario/renovar`
+**Endpoint:** POST `/api/usuario/renovar.php`
 
 **Headers:**
 
@@ -354,7 +347,6 @@ Authorization: Bearer {token}
 - Usuário precisa existir
 - Usuário precisa ter permissão para renovar o usuário
 - Para tipo "Credito": usuário precisa ter créditos disponíveis
-- Para tipo "Validade": não pode reduzir limite abaixo dos usuários já criados
 
 **Resposta de Sucesso:**
 
@@ -374,7 +366,7 @@ Authorization: Bearer {token}
 
 Exclui um usuário do sistema e de todos os servidores.
 
-**Endpoint:** POST `/api/usuario/excluir`
+**Endpoint:** POST `/api/usuario/excluir.php`
 
 **Headers:**
 
