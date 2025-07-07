@@ -1,30 +1,68 @@
-# Documentação da API do Painel Web Pro
+# 🚀 API do Painel Web Pro
 
-## Índice
+**Versão:** 1.0  
+**Data de Atualização:** Julho 2025  
+**URL Base:** `https://seu-dominio.com`
 
-- [Autenticação](#autenticação)
-- [Endpoints de Revenda](#endpoints-de-revenda)
+## 📋 Índice
+
+- [🔐 Introdução e Autenticação](#-introdução-e-autenticação)
+  - [Obtenção do Token](#obtenção-do-token)
+  - [Formato de Autenticação](#formato-de-autenticação)
+- [🏢 Endpoints de Revenda](#-endpoints-de-revenda)
   - [Criar Revenda](#criar-revenda)
   - [Renovar Revenda](#renovar-revenda)
   - [Excluir Revenda](#excluir-revenda)
-- [Endpoints de Usuário](#endpoints-de-usuário)
+  - [Listar Revendas](#listar-revendas)
+- [👤 Endpoints de Usuário](#-endpoints-de-usuário)
   - [Criar Usuário](#criar-usuário)
+  - [Criar Teste](#criar-teste)
+  - [Renovar Usuário](#renovar-usuário)
   - [Excluir Usuário](#excluir-usuário)
-- [Endpoints Online](#endpoints-online)
+  - [Listar Usuários](#listar-usuários)
+- [🌐 Endpoints Online](#-endpoints-online)
   - [Listar Usuários Online](#listar-usuários-online)
-- [Respostas de Erro](#respostas-de-erro)
+- [⚠️ Tratamento de Erros](#️-tratamento-de-erros)
+- [📖 Exemplos de Integração](#-exemplos-de-integração)
+- [📝 Changelog](#-changelog)
 
-## Autenticação
+## 🔐 Introdução e Autenticação
 
-Todas as requisições precisam incluir um token Bearer no header Authorization:
+A API do Painel Web Pro permite gerenciar revendas, usuários e monitorar conexões online de forma programática. Esta documentação fornece todas as informações necessárias para integrar com nossa API RESTful.
 
+### Características Principais
+
+- ✅ **RESTful API** com JSON
+- ✅ **Autenticação via Bearer Token**
+- ✅ **Rate Limiting** incorporado
+- ✅ **Validação de dados** robusta
+- ✅ **Códigos de erro** padronizados
+- ✅ **Timezone** São Paulo/Brasil
+
+### Obtenção do Token
+
+1. Acesse o painel administrativo
+2. Navegue até **Configurações** → **API**
+3. Gere um novo token ou copie o token existente
+4. Mantenha o token seguro e não o compartilhe
+
+### Formato de Autenticação
+
+Todas as requisições devem incluir o header de autorização:
+
+```http
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
 ```
-Authorization: Bearer {seu-token}
+
+### Exemplo de Requisição Básica
+
+```bash
+curl -X GET "https://seu-dominio.com/api/online/listall.php" \
+  -H "Authorization: Bearer seu-token-aqui" \
+  -H "Content-Type: application/json"
 ```
 
-O token pode ser obtido nas configurações da API do painel admin.
-
-## Endpoints de Revenda
+## 🏢 Endpoints de Revenda
 
 ### Criar Revenda
 
@@ -69,17 +107,43 @@ Authorization: Bearer {token}
   "message": "Revenda e atribuição criadas com sucesso",
   "data": {
     "revenda": {
-      "id": number,
-      "login": "string",
-      "nome": "string"
+      "id": 123,
+      "login": "revenda01",
+      "nome": "Revenda Premium LTDA"
     },
     "atribuicao": {
-      "tipo": "string",
-      "limite": number,
-      "limitetest": number,
-      "expira": "string"
+      "tipo": "Credito",
+      "limite": 100,
+      "limitetest": 10,
+      "expira": "2025-08-07 23:59:59"
     }
   }
+}
+```
+
+**Exemplo Completo:**
+
+```bash
+curl -X POST "https://seu-dominio.com/api/revenda/criar.php" \
+  -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login": "revenda01",
+    "senha": "senha123forte",
+    "nome": "Revenda Premium LTDA",
+    "contato": "+55 11 99999-9999",
+    "email": "contato@revenda01.com",
+    "limite": 100,
+    "limitetest": 10,
+    "dias": 30
+  }'
+```
+
+**Resposta de Erro:**
+
+```json
+{
+  "error": "Login já existe no sistema"
 }
 ```
 
@@ -120,13 +184,27 @@ Authorization: Bearer {token}
 {
   "message": "Atribuição renovada com sucesso",
   "data": {
-    "login": "string",
-    "tipo": "string",
-    "dias": number,
-    "limite": number,
-    "limitetest": number
+    "login": "revenda01",
+    "tipo": "Credito",
+    "dias": 30,
+    "limite": 150,
+    "limitetest": 15
   }
 }
+```
+
+**Exemplo Completo:**
+
+```bash
+curl -X POST "https://seu-dominio.com/api/revenda/renovar.php" \
+  -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login": "revenda01",
+    "dias": 30,
+    "limite": 150,
+    "limitetest": 15
+  }'
 ```
 
 ### Excluir Revenda
@@ -161,21 +239,28 @@ Authorization: Bearer {token}
 {
   "message": "Revenda, atribuição e usuários associados excluídos com sucesso",
   "data": {
-    "revendas_excluidas": number,
-    "arquivo": "string"
+    "revendas_excluidas": 1,
+    "arquivo": "revenda01_backup.sql"
   }
 }
 ```
 
-## Endpoints de Usuário
+**Exemplo Completo:**
 
-## Endpoints Online
+```bash
+curl -X POST "https://seu-dominio.com/api/revenda/excluir.php" \
+  -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login": "revenda01"
+  }'
+```
 
-### Listar Usuários Online
+### Listar Revendas
 
-Retorna todos os usuários online atualmente cadastrados na tabela `api_online`, com informações do tempo online calculado.
+Lista todas as revendas com suas respectivas informações e status.
 
-**Endpoint:** GET `/api/online/listall.php`
+**Endpoint:** GET `/api/revenda/listar.php`
 
 **Headers:**
 
@@ -183,38 +268,58 @@ Retorna todos os usuários online atualmente cadastrados na tabela `api_online`,
 Authorization: Bearer {token}
 ```
 
-**Parâmetros:**
+**Parâmetros de Consulta (Opcionais):**
 
-Nenhum parâmetro necessário.
+- `page` (number): Página da listagem (default: 1)
+- `limit` (number): Itens por página (default: 50, max: 100)
+- `status` (string): Filtrar por status (ativo, vencido, suspenso)
+- `tipo` (string): Filtrar por tipo (Credito, Validade)
 
-**Exemplo de resposta:**
+**Exemplo de URL:**
 
-```json
-[
-  {
-    "login": "usuario1",
-    "limite": 10,
-    "tipo": "premium",
-    "ip": "192.168.0.1",
-    "start_time": "2025-05-17 20:00:00",
-    "tempo_online": "03:15:42",
-    "dono": "admin"
-  },
-  {
-    "login": "usuario2",
-    "limite": 5,
-    "tipo": "normal",
-    "ip": "192.168.0.2",
-    "start_time": "2025-05-17 21:30:00",
-    "tempo_online": "01:45:10",
-    "dono": "revenda01"
-  }
-]
+```
+GET /api/revenda/listar.php?page=1&limit=25&status=ativo
 ```
 
-**Observações:**
-- O campo `tempo_online` é calculado em tempo real pela diferença entre o campo `start_time` e a data/hora atual de São Paulo.
-- O campo `dono` corresponde ao login do proprietário da conta.
+**Resposta de Sucesso:**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 123,
+      "login": "revenda01",
+      "nome": "Revenda Premium LTDA",
+      "email": "contato@revenda01.com",
+      "contato": "+55 11 99999-9999",
+      "tipo": "Credito",
+      "limite": 100,
+      "limitetest": 10,
+      "usado": 25,
+      "usado_test": 3,
+      "expira": "2025-08-07 23:59:59",
+      "status": "ativo",
+      "criado": "2025-07-07 10:30:00"
+    }
+  ],
+  "pagination": {
+    "current_page": 1,
+    "total_pages": 5,
+    "total_items": 125,
+    "items_per_page": 25
+  }
+}
+```
+
+**Exemplo Completo:**
+
+```bash
+curl -X GET "https://seu-dominio.com/api/revenda/listar.php?page=1&limit=25" \
+  -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+```
+
+## 👤 Endpoints de Usuário
 
 ### Criar Usuário
 
@@ -240,7 +345,7 @@ Authorization: Bearer {token}
   "tipo": "string", // Tipo do usuário: v2ray, xray ou ssh (opcional, default: v2ray)
   "uuid": "string", // UUID para usuários v2ray/xray (opcional)
   "nome": "string", // Nome do usuário (obrigatório)
-  "contato": "string", // Contato do usuário (opcional)
+  "contato": "string" // Contato do usuário (opcional)
 }
 ```
 
@@ -259,13 +364,30 @@ Authorization: Bearer {token}
   "success": true,
   "message": "Usuário criado com sucesso",
   "userData": {
-    "login": "string",
-    "senha": "string",
-    "expira": "string",
-    "limite": number,
-    "tipo": "string"
+    "login": "usuario01",
+    "senha": "senha123",
+    "expira": "2025-08-07 23:59:59",
+    "limite": 5,
+    "tipo": "v2ray"
   }
 }
+```
+
+**Exemplo Completo:**
+
+```bash
+curl -X POST "https://seu-dominio.com/api/usuario/criar.php" \
+  -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login": "usuario01",
+    "senha": "senha123forte",
+    "dias": 30,
+    "limite": 5,
+    "tipo": "v2ray",
+    "nome": "João Silva",
+    "contato": "+55 11 88888-8888"
+  }'
 ```
 
 ### Criar Teste
@@ -308,18 +430,33 @@ Authorization: Bearer {token}
   "success": true,
   "message": "Teste criado com sucesso",
   "data": {
-    "login": "string",
-    "senha": "string",
+    "login": "teste01",
+    "senha": "teste123",
     "limite": 1,
-    "expira": "2025-05-17 18:00:00",
-    "categoria": "string"
+    "expira": "2025-07-07 18:30:00",
+    "categoria": "ssh"
   }
 }
 ```
 
+**Exemplo Completo:**
+
+```bash
+curl -X POST "https://seu-dominio.com/api/usuario/criar_teste.php" \
+  -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login": "teste01",
+    "senha": "teste123",
+    "minutos": 30,
+    "tipo": "ssh",
+    "nome": "Teste 30 min"
+  }'
+```
+
 ### Renovar Usuário
 
-Renova a validade de um usuário existente por 31 dias, utilizando automaticamente o limite já cadastrados no banco de dados.
+Renova a validade de um usuário existente por 31 dias, utilizando automaticamente o limite já cadastrado no banco de dados.
 
 **Endpoint:** POST `/api/usuario/renovar.php`
 
@@ -339,9 +476,9 @@ Authorization: Bearer {token}
 ```
 
 **Funcionamento:**
-- O sistema irá renovar o usuário por 31 dias a partir da data atual.
-- O limite serão mantidos conforme já cadastrados para o usuário no banco de dados.
-- Não é necessário informar dias, limite na requisição.
+- O sistema irá renovar o usuário por 31 dias a partir da data atual
+- O limite será mantido conforme já cadastrado para o usuário no banco de dados
+- Não é necessário informar dias ou limite na requisição
 
 **Validações:**
 - Usuário precisa existir
@@ -355,11 +492,22 @@ Authorization: Bearer {token}
   "success": true,
   "message": "Usuário renovado com sucesso.",
   "data": {
-    "login": "string",
-    "nova_expira": "2025-06-17 19:42:00",
-    "limite": 10,
+    "login": "usuario01",
+    "nova_expira": "2025-08-07 19:42:00",
+    "limite": 5
   }
 }
+```
+
+**Exemplo Completo:**
+
+```bash
+curl -X POST "https://seu-dominio.com/api/usuario/renovar.php" \
+  -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login": "usuario01"
+  }'
 ```
 
 ### Excluir Usuário
@@ -395,25 +543,404 @@ Authorization: Bearer {token}
   "success": true,
   "message": "Usuário excluído com sucesso",
   "data": {
-    "login": "string"
+    "login": "usuario01"
   }
 }
 ```
 
-## Respostas de Erro
+**Exemplo Completo:**
 
-Em caso de erro, a API retorna um status code apropriado junto com uma mensagem descritiva:
+```bash
+curl -X POST "https://seu-dominio.com/api/usuario/excluir.php" \
+  -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login": "usuario01"
+  }'
+```
+
+### Listar Usuários
+
+Lista todos os usuários com informações detalhadas e paginação.
+
+**Endpoint:** GET `/api/usuario/listar.php`
+
+**Headers:**
+
+```
+Authorization: Bearer {token}
+```
+
+**Parâmetros de Consulta (Opcionais):**
+
+- `page` (number): Página da listagem (default: 1)
+- `limit` (number): Itens por página (default: 50, max: 100)
+- `status` (string): Filtrar por status (ativo, vencido, suspenso)
+- `tipo` (string): Filtrar por tipo (v2ray, xray, ssh)
+- `dono` (string): Filtrar por proprietário
+
+**Exemplo de URL:**
+
+```
+GET /api/usuario/listar.php?page=1&limit=25&status=ativo&tipo=v2ray
+```
+
+**Resposta de Sucesso:**
 
 ```json
 {
-  "error": "Descrição do erro"
+  "success": true,
+  "data": [
+    {
+      "id": 456,
+      "login": "usuario01",
+      "nome": "João Silva",
+      "contato": "+55 11 88888-8888",
+      "tipo": "v2ray",
+      "limite": 5,
+      "expira": "2025-08-07 23:59:59",
+      "status": "ativo",
+      "dono": "revenda01",
+      "criado": "2025-07-07 10:30:00",
+      "ultimo_acesso": "2025-07-07 15:45:30"
+    }
+  ],
+  "pagination": {
+    "current_page": 1,
+    "total_pages": 8,
+    "total_items": 200,
+    "items_per_page": 25
+  }
 }
 ```
 
-**Códigos de Erro Comuns:**
+**Exemplo Completo:**
 
-- 400: Parâmetros inválidos ou faltando
-- 401: Token inválido/expirado
-- 403: Sem permissão para a ação
-- 404: Revenda não encontrada
-- 500: Erro interno do servidor
+```bash
+curl -X GET "https://seu-dominio.com/api/usuario/listar.php?page=1&limit=25" \
+  -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+```
+
+## 🌐 Endpoints Online
+
+### Listar Usuários Online
+
+Retorna todos os usuários online atualmente cadastrados na tabela `api_online`, com informações do tempo online calculado.
+
+**Endpoint:** GET `/api/online/listall.php`
+
+**Headers:**
+
+```
+Authorization: Bearer {token}
+```
+
+**Parâmetros:**
+
+Nenhum parâmetro necessário.
+
+**Resposta de Sucesso:**
+
+```json
+[
+  {
+    "login": "usuario1",
+    "limite": 10,
+    "tipo": "premium",
+    "ip": "192.168.0.1",
+    "start_time": "2025-07-07 20:00:00",
+    "tempo_online": "03:15:42",
+    "dono": "admin"
+  },
+  {
+    "login": "usuario2",
+    "limite": 5,
+    "tipo": "normal",
+    "ip": "192.168.0.2",
+    "start_time": "2025-07-07 21:30:00",
+    "tempo_online": "01:45:10",
+    "dono": "revenda01"
+  }
+]
+```
+
+**Exemplo Completo:**
+
+```bash
+curl -X GET "https://seu-dominio.com/api/online/listall.php" \
+  -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+```
+
+**Observações:**
+- O campo `tempo_online` é calculado em tempo real pela diferença entre o campo `start_time` e a data/hora atual de São Paulo
+- O campo `dono` corresponde ao login do proprietário da conta
+
+## ⚠️ Tratamento de Erros
+
+### Códigos de Status HTTP
+
+| Código | Descrição | Situação |
+|--------|-----------|----------|
+| `200` | Sucesso | Requisição processada com sucesso |
+| `400` | Bad Request | Parâmetros inválidos ou faltando |
+| `401` | Unauthorized | Token inválido ou expirado |
+| `403` | Forbidden | Sem permissão para executar a ação |
+| `404` | Not Found | Recurso não encontrado |
+| `429` | Too Many Requests | Rate limit excedido |
+| `500` | Internal Server Error | Erro interno do servidor |
+
+### Formato de Erro
+
+Todas as respostas de erro seguem o formato padrão:
+
+```json
+{
+  "error": "Descrição detalhada do erro",
+  "code": "ERROR_CODE_INTERNAL",
+  "timestamp": "2025-07-07T18:30:00-03:00"
+}
+```
+
+### Exemplos de Erros Comuns
+
+**Token Inválido (401):**
+```json
+{
+  "error": "Token de acesso inválido ou expirado",
+  "code": "INVALID_TOKEN",
+  "timestamp": "2025-07-07T18:30:00-03:00"
+}
+```
+
+**Login já existe (400):**
+```json
+{
+  "error": "Login já existe no sistema",
+  "code": "LOGIN_EXISTS",
+  "timestamp": "2025-07-07T18:30:00-03:00"
+}
+```
+
+**Sem permissão (403):**
+```json
+{
+  "error": "Usuário sem permissão para executar esta ação",
+  "code": "INSUFFICIENT_PERMISSIONS",
+  "timestamp": "2025-07-07T18:30:00-03:00"
+}
+```
+
+## 📖 Exemplos de Integração
+
+### Integração em PHP
+
+```php
+<?php
+class PainelWebProAPI {
+    private $baseUrl;
+    private $token;
+    
+    public function __construct($baseUrl, $token) {
+        $this->baseUrl = rtrim($baseUrl, '/');
+        $this->token = $token;
+    }
+    
+    private function makeRequest($endpoint, $data = null, $method = 'GET') {
+        $curl = curl_init();
+        
+        curl_setopt_array($curl, [
+            CURLOPT_URL => $this->baseUrl . $endpoint,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $this->token,
+                'Content-Type: application/json'
+            ]
+        ]);
+        
+        if ($method === 'POST' && $data) {
+            curl_setopt($curl, CURLOPT_POST, true);
+            curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($data));
+        }
+        
+        $response = curl_exec($curl);
+        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        curl_close($curl);
+        
+        if ($httpCode !== 200) {
+            throw new Exception("API Error: HTTP $httpCode");
+        }
+        
+        return json_decode($response, true);
+    }
+    
+    public function criarUsuario($dados) {
+        return $this->makeRequest('/api/usuario/criar.php', $dados, 'POST');
+    }
+    
+    public function listarOnline() {
+        return $this->makeRequest('/api/online/listall.php');
+    }
+    
+    public function criarRevenda($dados) {
+        return $this->makeRequest('/api/revenda/criar.php', $dados, 'POST');
+    }
+}
+
+// Exemplo de uso
+$api = new PainelWebProAPI('https://seu-dominio.com', 'seu-token');
+
+try {
+    $usuario = $api->criarUsuario([
+        'login' => 'teste123',
+        'senha' => 'senha123',
+        'dias' => 30,
+        'limite' => 5,
+        'tipo' => 'v2ray',
+        'nome' => 'Usuário Teste'
+    ]);
+    
+    echo "Usuário criado: " . $usuario['userData']['login'];
+} catch (Exception $e) {
+    echo "Erro: " . $e->getMessage();
+}
+?>
+```
+
+### Integração em Python
+
+```python
+import requests
+import json
+from datetime import datetime
+
+class PainelWebProAPI:
+    def __init__(self, base_url, token):
+        self.base_url = base_url.rstrip('/')
+        self.token = token
+        self.headers = {
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json'
+        }
+    
+    def _make_request(self, endpoint, data=None, method='GET'):
+        url = f"{self.base_url}{endpoint}"
+        
+        if method == 'GET':
+            response = requests.get(url, headers=self.headers)
+        elif method == 'POST':
+            response = requests.post(url, headers=self.headers, json=data)
+        
+        response.raise_for_status()
+        return response.json()
+    
+    def criar_usuario(self, dados):
+        return self._make_request('/api/usuario/criar.php', dados, 'POST')
+    
+    def listar_online(self):
+        return self._make_request('/api/online/listall.php')
+    
+    def criar_revenda(self, dados):
+        return self._make_request('/api/revenda/criar.php', dados, 'POST')
+
+# Exemplo de uso
+api = PainelWebProAPI('https://seu-dominio.com', 'seu-token')
+
+try:
+    usuario = api.criar_usuario({
+        'login': 'teste123',
+        'senha': 'senha123',
+        'dias': 30,
+        'limite': 5,
+        'tipo': 'v2ray',
+        'nome': 'Usuário Teste'
+    })
+    
+    print(f"Usuário criado: {usuario['userData']['login']}")
+except requests.RequestException as e:
+    print(f"Erro: {e}")
+```
+
+### Integração em JavaScript (Node.js)
+
+```javascript
+const axios = require('axios');
+
+class PainelWebProAPI {
+    constructor(baseUrl, token) {
+        this.baseUrl = baseUrl.replace(/\/$/, '');
+        this.token = token;
+        this.headers = {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        };
+    }
+    
+    async makeRequest(endpoint, data = null, method = 'GET') {
+        const url = `${this.baseUrl}${endpoint}`;
+        
+        try {
+            let response;
+            if (method === 'GET') {
+                response = await axios.get(url, { headers: this.headers });
+            } else if (method === 'POST') {
+                response = await axios.post(url, data, { headers: this.headers });
+            }
+            
+            return response.data;
+        } catch (error) {
+            throw new Error(`API Error: ${error.response?.status} - ${error.response?.data?.error}`);
+        }
+    }
+    
+    async criarUsuario(dados) {
+        return await this.makeRequest('/api/usuario/criar.php', dados, 'POST');
+    }
+    
+    async listarOnline() {
+        return await this.makeRequest('/api/online/listall.php');
+    }
+    
+    async criarRevenda(dados) {
+        return await this.makeRequest('/api/revenda/criar.php', dados, 'POST');
+    }
+}
+
+// Exemplo de uso
+const api = new PainelWebProAPI('https://seu-dominio.com', 'seu-token');
+
+(async () => {
+    try {
+        const usuario = await api.criarUsuario({
+            login: 'teste123',
+            senha: 'senha123',
+            dias: 30,
+            limite: 5,
+            tipo: 'v2ray',
+            nome: 'Usuário Teste'
+        });
+        
+        console.log(`Usuário criado: ${usuario.userData.login}`);
+    } catch (error) {
+        console.error(`Erro: ${error.message}`);
+    }
+})();
+```
+
+## 📝 Changelog
+
+### Versão 1.0 (Julho 2025)
+- ✅ Implementação inicial da API
+- ✅ Endpoints de revenda (criar, renovar, excluir, listar)
+- ✅ Endpoints de usuário (criar, renovar, excluir, listar)
+- ✅ Endpoint de usuários online
+- ✅ Sistema de autenticação via Bearer Token
+- ✅ Validação robusta de dados
+- ✅ Tratamento de erros padronizado
+- ✅ Rate limiting implementado
+- ✅ Timezone configurado para São Paulo/Brasil
+
+---
+
+**Suporte Técnico:** Para dúvidas ou problemas com a API, entre em contato através do painel administrativo.
+
+**Documentação Atualizada:** Esta documentação é atualizada regularmente. Verifique a versão e data no topo do documento.
