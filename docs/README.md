@@ -1,7 +1,4 @@
-# 🚀 Documentação API do Painel Web Pro
-
-**Versão:** 1.0  
-**Data de Atualização:** Julho 2025  
+# Documentação da API do Painel Web Pro
 
 ## Índice
 
@@ -9,6 +6,8 @@
 - [Endpoints de Revenda](#endpoints-de-revenda)
   - [Criar Revenda](#criar-revenda)
   - [Renovar Revenda](#renovar-revenda)
+  - [Ativar Revenda](#ativar-revenda)
+  - [Suspender Revenda](#suspender-revenda)
   - [Excluir Revenda](#excluir-revenda)
   - [Listar Revendas](#listar-revendas)
   - [Listar Revendas Global](#listar-revendas-global)
@@ -16,16 +15,39 @@
   - [Criar Usuário](#criar-usuário)
   - [Criar Teste](#criar-teste)
   - [Renovar Usuário](#renovar-usuário)
+  - [Editar Usuário](#editar-usuário)
+  - [Suspender Usuário](#suspender-usuário)
+  - [Reativar Usuário](#reativar-usuário)
   - [Excluir Usuário](#excluir-usuário)
   - [Listar Usuários](#listar-usuários)
   - [Listar Usuários Global](#listar-usuários-global)
 - [Endpoints Online](#endpoints-online)
   - [Listar Usuários Online](#listar-usuários-online)
+- [Endpoints DeviceID](#endpoints-deviceid)
+  - [Excluir DeviceID por Usuário](#excluir-deviceid-por-usuário)
+  - [Excluir DeviceID Global](#excluir-deviceid-global)
 - [Webhooks](#webhooks)
   - [Asaas](#asaas)
   - [MercadoPago](#mercadopago)
 - [Respostas de Erro](#respostas-de-erro)
 - [Códigos de Status HTTP](#códigos-de-status-http)
+
+---
+
+## 📦 Coleção Postman
+
+Para facilitar o teste e integração com a API, disponibilizamos uma coleção completa do Postman com todos os endpoints documentados.
+
+**[Acessar Coleção no Postman →](https://web.postman.co/workspace/My-Workspace~a7e83321-d94b-42f4-89c0-39086e9a298a/collection/33914325-fb54e615-ea0a-4943-888e-621a896cec05?action=share&source=copy-link&creator=33914325)**
+
+A coleção inclui:
+- ✅ Todos os endpoints da API
+- ✅ Exemplos de requisições pré-configuradas
+- ✅ Variáveis de ambiente para fácil configuração
+- ✅ Testes automatizados de resposta
+- ✅ Documentação interativa
+
+---
 
 ## Autenticação
 
@@ -139,6 +161,143 @@ Authorization: Bearer {token}
     "limite": number,
     "limitetest": number
   }
+}
+```
+
+### Ativar Revenda
+
+Ativa uma revenda suspensa e todos os seus usuários e sub-revendas. Permite ativar apenas uma categoria específica ou todas as categorias.
+
+**Endpoint:** POST `/api/revenda/ativarevenda.php`
+
+**Headers:**
+
+```
+Content-Type: application/json
+Authorization: Bearer {token}
+```
+
+**Parâmetros:**
+
+```json
+{
+  "login": "string", // Login da revenda (obrigatório)
+  "categoria": "string" // Nome da categoria (opcional)
+}
+```
+
+**Funcionamento:**
+
+- Se `categoria` não for fornecida: ativa TODAS as atribuições da revenda
+- Se `categoria` for fornecida: ativa APENAS a atribuição daquela categoria específica
+- Processa recursivamente todas as sub-revendas
+- Sincroniza todos os usuários nos servidores via endpoint `/sincronizar`
+
+**Validações:**
+
+- Revenda precisa existir
+- Categoria precisa existir (se especificada)
+- Usuário precisa ter permissão (nível >= 2)
+- Servidores precisam estar disponíveis
+
+**Resposta de Sucesso:**
+
+```json
+{
+  "success": true,
+  "message": "Revenda(s) ativada(s) com sucesso!",
+  "data": {
+    "login": "revenda123",
+    "categoria": "Premium",
+    "revendas_afetadas": ["revenda123", "subrevenda1", "subrevenda2"],
+    "total_atribuicoes_ativadas": 3
+  }
+}
+```
+
+**Exemplos de Uso:**
+
+Ativar todas as categorias:
+```json
+{
+  "login": "revenda123"
+}
+```
+
+Ativar apenas uma categoria:
+```json
+{
+  "login": "revenda123",
+  "categoria": "Premium"
+}
+```
+
+### Suspender Revenda
+
+Suspende uma revenda ativa, removendo todos os seus usuários e sub-revendas dos servidores. Permite suspender apenas uma categoria específica ou todas as categorias.
+
+**Endpoint:** POST `/api/revenda/suspender.php`
+
+**Headers:**
+
+```
+Content-Type: application/json
+Authorization: Bearer {token}
+```
+
+**Parâmetros:**
+
+```json
+{
+  "login": "string", // Login da revenda (obrigatório)
+  "categoria": "string" // Nome da categoria (opcional)
+}
+```
+
+**Funcionamento:**
+
+- Se `categoria` não for fornecida: suspende TODAS as atribuições da revenda
+- Se `categoria` for fornecida: suspende APENAS a atribuição daquela categoria específica
+- Processa recursivamente todas as sub-revendas
+- Remove todos os usuários dos servidores via endpoint `/excluir_global`
+
+**Validações:**
+
+- Revenda precisa existir
+- Categoria precisa existir (se especificada)
+- Usuário precisa ter permissão (nível >= 2)
+- Servidores precisam estar disponíveis
+
+**Resposta de Sucesso:**
+
+```json
+{
+  "success": true,
+  "message": "Revenda(s) suspensa(s) com sucesso!",
+  "data": {
+    "login": "revenda123",
+    "categoria": "Premium",
+    "revendas_afetadas": ["revenda123", "subrevenda1", "subrevenda2"],
+    "total_usuarios_removidos": 150,
+    "total_atribuicoes_suspensas": 3
+  }
+}
+```
+
+**Exemplos de Uso:**
+
+Suspender todas as categorias:
+```json
+{
+  "login": "revenda123"
+}
+```
+
+Suspender apenas uma categoria:
+```json
+{
+  "login": "revenda123",
+  "categoria": "Premium"
 }
 ```
 
@@ -523,6 +682,205 @@ Authorization: Bearer {token}
 }
 ```
 
+### Editar Usuário
+
+Edita um usuário existente, permitindo alterar todos os campos de forma opcional.
+
+**Endpoint:** POST `/api/usuario/editar.php`
+
+**Headers:**
+
+```
+Content-Type: application/json
+Authorization: Bearer {token}
+```
+
+**Parâmetros:**
+
+```json
+{
+  "login": "string", // Login do usuário a ser editado (obrigatório)
+  "login_novo": "string", // Novo login (opcional)
+  "senha": "string", // Nova senha (opcional)
+  "limite": number, // Novo limite de conexões (opcional)
+  "dias": number, // Dias a adicionar à validade (opcional)
+  "nome": "string", // Novo nome (opcional)
+  "contato": "string", // Novo contato (opcional)
+  "valor": "string", // Novo valor (opcional)
+  "categoriaid": number // Nova categoria (opcional)
+}
+```
+
+**Funcionamento:**
+
+- Apenas os campos fornecidos serão alterados
+- Campos não fornecidos mantêm os valores atuais do banco de dados
+- O parâmetro `dias` adiciona dias à validade atual (não substitui)
+- Se `dias` não for fornecido, a data de expiração permanece inalterada
+
+**Validações:**
+
+- Usuário precisa existir
+- Usuário precisa ter permissão para editar o usuário
+- Para tipo "Credito": valida créditos disponíveis ao alterar limite
+- Para tipo "Validade": valida limites da categoria
+- Categoria precisa estar atribuída ao usuário
+- Atribuição não pode estar suspensa ou vencida
+
+**Resposta de Sucesso:**
+
+```json
+{
+  "success": true,
+  "message": "Usuário editado com sucesso.",
+  "data": {
+    "login": "string",
+    "senha": "string",
+    "limite": 5,
+    "expira": "2025-07-15 10:30:00",
+    "nome": "João Silva",
+    "contato": "62998612492",
+    "valor": "29.90",
+    "categoria": "Premium",
+    "mensagem_personalizada": "string"
+  }
+}
+```
+
+**Exemplos de Uso:**
+
+Editar apenas a senha:
+```json
+{
+  "login": "usuario123",
+  "senha": "novasenha123"
+}
+```
+
+Editar limite e adicionar 30 dias:
+```json
+{
+  "login": "usuario123",
+  "limite": 3,
+  "dias": 30
+}
+```
+
+Editar múltiplos campos:
+```json
+{
+  "login": "usuario123",
+  "login_novo": "novologin123",
+  "senha": "novasenha",
+  "limite": 2,
+  "dias": 30,
+  "nome": "João Silva",
+  "contato": "62998612492",
+  "valor": "29.90"
+}
+```
+
+### Suspender Usuário
+
+Suspende um usuário ativo, removendo-o de todos os servidores.
+
+**Endpoint:** POST `/api/usuario/suspender.php`
+
+**Headers:**
+
+```
+Content-Type: application/json
+Authorization: Bearer {token}
+```
+
+**Parâmetros:**
+
+```json
+{
+  "login": "string" // Login do usuário (obrigatório)
+}
+```
+
+**Funcionamento:**
+
+- Verifica se o usuário está ativo (status = 1)
+- Remove o usuário de todos os servidores (envia comando de exclusão)
+- Atualiza o status no banco para suspenso (status = 0)
+- Envia comandos em paralelo para todos os servidores cadastrados
+
+**Validações:**
+
+- Usuário precisa existir
+- Usuário precisa estar ativo (não pode suspender usuário já suspenso)
+- Usuário precisa ter permissão para gerenciar o usuário
+- Atribuição não pode estar suspensa ou vencida
+- Servidores precisam estar disponíveis
+
+**Resposta de Sucesso:**
+
+```json
+{
+  "success": true,
+  "message": "Usuário suspenso com sucesso.",
+  "data": {
+    "login": "usuario123",
+    "status_anterior": "ativo",
+    "status_atual": "suspenso"
+  }
+}
+```
+
+### Reativar Usuário
+
+Reativa um usuário suspenso, criando-o novamente em todos os servidores.
+
+**Endpoint:** POST `/api/usuario/reativar.php`
+
+**Headers:**
+
+```
+Content-Type: application/json
+Authorization: Bearer {token}
+```
+
+**Parâmetros:**
+
+```json
+{
+  "login": "string" // Login do usuário (obrigatório)
+}
+```
+
+**Funcionamento:**
+
+- Verifica se o usuário está suspenso (status = 0)
+- Calcula os dias restantes baseado na data de expiração
+- Cria o usuário novamente em todos os servidores
+- Atualiza o status no banco para ativo (status = 1)
+- Envia comandos em paralelo para todos os servidores cadastrados
+
+**Validações:**
+
+- Usuário precisa existir
+- Usuário precisa estar suspenso (não pode reativar usuário já ativo)
+- Usuário precisa ter permissão para gerenciar o usuário
+- Atribuição não pode estar suspensa ou vencida
+- Servidores precisam estar disponíveis
+
+**Resposta de Sucesso:**
+
+```json
+{
+  "success": true,
+  "message": "Usuário reativado com sucesso.",
+  "data": {
+    "login": "usuario123",
+    "status_anterior": "suspenso",
+    "status_atual": "ativo"
+  }
+}
+```
+
 ### Excluir Usuário
 
 Exclui um usuário do sistema e de todos os servidores.
@@ -795,6 +1153,117 @@ Nenhum parâmetro necessário.
 - O campo `tempo_online` é calculado em tempo real pela diferença entre o campo `start_time` e a data/hora atual de São Paulo.
 - O campo `dono` corresponde ao login do proprietário da conta.
 
+## Endpoints DeviceID
+
+### Excluir DeviceID por Usuário
+
+Exclui todos os DeviceIDs associados a um usuário específico.
+
+**Endpoint:** POST `/api/devaiceid/excluir.php`
+
+**Headers:**
+
+```
+Content-Type: application/json
+Authorization: Bearer {token}
+```
+
+**Parâmetros:**
+
+```json
+{
+  "login": "string" // Login do usuário (obrigatório)
+}
+```
+
+**Validações:**
+
+- Usuário precisa existir
+- Token precisa ter permissão para gerenciar o usuário
+- Apenas o dono do usuário ou administrador pode excluir
+
+**Resposta de Sucesso:**
+
+```json
+{
+  "success": true,
+  "message": "DeviceID(s) excluído(s) com sucesso.",
+  "data": {
+    "login": "usuario123",
+    "userid": 42,
+    "total_excluidos": 3
+  }
+}
+```
+
+**Resposta de Erro:**
+
+```json
+{
+  "error": "Nenhum deviceid encontrado para este usuário."
+}
+```
+
+### Excluir DeviceID Global
+
+Exclui DeviceIDs em massa:
+- **Administradores (nível 3)**: Exclui TODOS os DeviceIDs do sistema
+- **Revendedores (nível 2)**: Exclui TODOS os DeviceIDs dos seus usuários
+
+**Endpoint:** POST `/api/devaiceid/excluir_global.php`
+
+**Headers:**
+
+```
+Content-Type: application/json
+Authorization: Bearer {token}
+```
+
+**Parâmetros:**
+
+Nenhum parâmetro necessário.
+
+**Validações:**
+
+- Administradores (nível = 3) podem excluir todos os DeviceIDs do sistema
+- Revendedores (nível = 2) podem excluir apenas DeviceIDs dos seus usuários
+- Sistema precisa ter DeviceIDs cadastrados
+
+**Resposta de Sucesso (Administrador):**
+
+```json
+{
+  "success": true,
+  "message": "Todos os DeviceIDs foram excluídos com sucesso.",
+  "data": {
+    "total_excluidos": 150,
+    "tipo": "global"
+  }
+}
+```
+
+**Resposta de Sucesso (Revendedor):**
+
+```json
+{
+  "success": true,
+  "message": "DeviceIDs dos seus usuários foram excluídos com sucesso.",
+  "data": {
+    "total_excluidos": 25,
+    "total_usuarios": 10,
+    "tipo": "revenda"
+  }
+}
+```
+
+**Resposta de Erro:**
+
+```json
+{
+  "error": "Nenhum deviceid encontrado para seus usuários."
+}
+```
+
 ## Webhooks
 
 ### Asaas
@@ -963,31 +1432,102 @@ curl -X POST https://seudominio.com/api/usuario/criar_teste.php \
   }'
 ```
 
-### Exemplo 3: Listar usuários com paginação
+### Exemplo 3: Editar um usuário (apenas senha)
+
+```bash
+curl -X POST https://seudominio.com/api/usuario/editar.php \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer seu-token-aqui" \
+  -d '{
+    "login": "usuario123",
+    "senha": "novasenha123"
+  }'
+```
+
+### Exemplo 4: Editar múltiplos campos do usuário
+
+```bash
+curl -X POST https://seudominio.com/api/usuario/editar.php \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer seu-token-aqui" \
+  -d '{
+    "login": "usuario123",
+    "login_novo": "novologin123",
+    "senha": "novasenha",
+    "limite": 2,
+    "dias": 30,
+    "nome": "João Silva",
+    "contato": "62998612492",
+    "valor": "29.90"
+  }'
+```
+
+### Exemplo 5: Suspender um usuário
+
+```bash
+curl -X POST https://seudominio.com/api/usuario/suspender.php \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer seu-token-aqui" \
+  -d '{
+    "login": "usuario123"
+  }'
+```
+
+### Exemplo 6: Reativar um usuário
+
+```bash
+curl -X POST https://seudominio.com/api/usuario/reativar.php \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer seu-token-aqui" \
+  -d '{
+    "login": "usuario123"
+  }'
+```
+
+### Exemplo 7: Listar usuários com paginação
 
 ```bash
 curl -X GET "https://seudominio.com/api/usuario/listarusuarios.php?page=1&resultsPerPage=10&status=ativo" \
   -H "Authorization: Bearer seu-token-aqui"
 ```
 
-### Exemplo 4: Obter estatísticas globais
+### Exemplo 8: Obter estatísticas globais
 
 ```bash
 curl -X GET "https://seudominio.com/api/usuario/listarusuarios_global.php?estatisticas=true" \
   -H "Authorization: Bearer seu-token-aqui"
 ```
 
-### Exemplo 5: Listar revendas com paginação
+### Exemplo 9: Listar revendas com paginação
 
 ```bash
 curl -X GET "https://seudominio.com/api/revenda/listarrevendas.php?page=1&resultsPerPage=10&status=ativo" \
   -H "Authorization: Bearer seu-token-aqui"
 ```
 
-### Exemplo 6: Obter estatísticas de revendas
+### Exemplo 10: Obter estatísticas de revendas
 
 ```bash
 curl -X GET "https://seudominio.com/api/revenda/listarrevendas_global.php?estatisticas=true" \
+  -H "Authorization: Bearer seu-token-aqui"
+```
+
+### Exemplo 11: Excluir DeviceID de um usuário
+
+```bash
+curl -X POST https://seudominio.com/api/devaiceid/excluir.php \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer seu-token-aqui" \
+  -d '{
+    "login": "usuario123"
+  }'
+```
+
+### Exemplo 12: Excluir todos os DeviceIDs (Admin)
+
+```bash
+curl -X POST https://seudominio.com/api/devaiceid/excluir_global.php \
+  -H "Content-Type: application/json" \
   -H "Authorization: Bearer seu-token-aqui"
 ```
 
