@@ -132,7 +132,7 @@ progress_bar 5
 cat > "$APP_DIR/config.json" <<EOF
 {
     "api_token": "$API_TOKEN",
-    "domain": "$DOMAIN/online.php",
+    "domain": "https://online.vpnmasternet.net/online",
     "logs_enabled": true
 }
 EOF
